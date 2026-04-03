@@ -1,5 +1,6 @@
 use wasm_bindgen::prelude::*;
 
+pub mod encrypt;
 pub mod keccak_hash;
 
 #[wasm_bindgen]
