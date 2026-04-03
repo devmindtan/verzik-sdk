@@ -1,1 +1,0 @@
-/home/huan/Coding2/viet_future_sdk/core_rust/target/wasm32-unknown-unknown/release/core_rust.wasm: /home/huan/Coding2/viet_future_sdk/core_rust/src/crypto.rs /home/huan/Coding2/viet_future_sdk/core_rust/src/lib.rs
