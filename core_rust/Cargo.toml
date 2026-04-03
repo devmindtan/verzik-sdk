@@ -1,0 +1,13 @@
+[package]
+name = "verzik-sdk"
+version = "0.1.0"
+edition = "2024" 
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wasm-bindgen = "0.2"
+tiny-keccak = { version = "2.0", features = ["keccak"] }
+hex = "0.4" 
+#aes-gcm = "0.10"
