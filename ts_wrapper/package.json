@@ -1,13 +1,24 @@
 {
-  "name": "ts_wrapper",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "name": "@verzik/sdk",
+  "version": "0.1.0",
+  "description": "Verzik SDK — Hybrid encryption (AES-256-GCM + ECIES) powered by WASM",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/",
+    "core_wasm/"
+  ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "tsc",
+    "build:wasm": "cd ../core_rust && wasm-pack build --target nodejs --out-dir ../ts_wrapper/core_wasm",
+    "build:all": "npm run build:wasm && npm run build",
+    "typecheck": "tsc --noEmit"
   },
-  "keywords": [],
+  "keywords": ["encryption", "aes", "ecies", "wasm", "sdk"],
   "author": "",
   "license": "ISC",
-  "type": "commonjs"
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0"
+  }
 }

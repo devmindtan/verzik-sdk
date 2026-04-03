@@ -1,1 +1,5 @@
-/target
+node_modules/
+target/
+core_wasm/
+verzik_package.json
+*.bin 
