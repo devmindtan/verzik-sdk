@@ -2,11 +2,15 @@ export interface VerzikPackage {
   encrypted_file: Uint8Array;
   encrypted_key: Uint8Array;
   nonce: Uint8Array;
+  ciphertext_hash: string;
+  encryption_meta_hash: string;
 }
 
 export interface VerzikMetadata {
   encrypted_key: Uint8Array;
   nonce: Uint8Array;
+  ciphertext_hash: string;
+  encryption_meta_hash: string;
 }
 
 export interface VerzikEnvelope {
@@ -23,4 +27,15 @@ export interface VerzikError {
 export interface EncryptOptions {
   aesKey?: Uint8Array;
   nonce?: Uint8Array;
+}
+
+export interface TorusNetworkOptions {
+  network: "sapphire_devnet" | "sapphire_mainnet" | "testnet" | "mainnet" | string;
+  clientId: string;
+  verifier: string;
+}
+
+export interface ReWrapResult {
+  encrypted_key: Uint8Array;
+  encryption_meta_hash: string;
 }

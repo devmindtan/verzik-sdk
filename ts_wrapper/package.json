@@ -14,11 +14,23 @@
     "build:all": "npm run build:wasm && npm run build",
     "typecheck": "tsc --noEmit"
   },
-  "keywords": ["encryption", "aes", "ecies", "wasm", "sdk"],
+  "keywords": [
+    "encryption",
+    "aes",
+    "ecies",
+    "wasm",
+    "sdk"
+  ],
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "typescript": "^5.0.0",
-    "@types/node": "^20.0.0"
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@toruslabs/fetch-node-details": "^16.1.1",
+    "@toruslabs/torus.js": "^17.2.3",
+    "dotenv": "^17.4.0",
+    "ethers": "^6.16.0"
   }
 }

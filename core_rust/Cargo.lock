@@ -497,6 +497,7 @@ dependencies = [
  "aes-gcm",
  "ecies",
  "hex",
+ "js-sys",
  "serde",
  "serde-wasm-bindgen",
  "tiny-keccak",

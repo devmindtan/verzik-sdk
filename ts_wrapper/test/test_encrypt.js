@@ -36,9 +36,11 @@ async function testEncryptFlow() {
     const pubKeyBytes = hexToBytes(pubKeyHex);
     const pkg = VerzikSDK.encrypt(fileData, pubKeyBytes);
 
-    console.log("  ├─ encrypted_file:", pkg.encrypted_file.length, "bytes");
-    console.log("  ├─ encrypted_key: ", pkg.encrypted_key.length, "bytes");
-    console.log("  └─ nonce:         ", pkg.nonce.length, "bytes");
+    console.log("  ├─ encrypted_file:        ", pkg.encrypted_file.length, "bytes");
+    console.log("  ├─ encrypted_key:         ", pkg.encrypted_key.length, "bytes");
+    console.log("  ├─ nonce:                 ", pkg.nonce.length, "bytes");
+    console.log("  ├─ ciphertext_hash (New): ", pkg.ciphertext_hash);
+    console.log("  └─ encryption_meta_hash:  ", pkg.encryption_meta_hash);
 
     // ─── Bước 5: Split thành metadata + ciphertext (cho việc upload riêng) ───
     const envelope = VerzikSDK.split(pkg);

@@ -2,6 +2,7 @@ use wasm_bindgen::prelude::*;
 
 pub mod encrypt;
 pub mod keccak_hash;
+pub mod re_wrap;
 
 #[wasm_bindgen]
 extern "C" {

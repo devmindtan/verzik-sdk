@@ -5,6 +5,7 @@ use aes_gcm::{
 use ecies::{decrypt as ecies_decrypt, encrypt as ecies_encrypt};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
+use crate::keccak_hash::hash_doc;
 
 #[wasm_bindgen]
 #[derive(Clone, Copy, Debug)]
@@ -17,7 +18,7 @@ pub enum SdkErrorCode {
     EciesUnwrapFailed,
 }
 
-fn sdk_err(code: SdkErrorCode, detail: &str) -> JsValue {
+pub fn sdk_err(code: SdkErrorCode, detail: &str) -> JsValue {
     JsValue::from_str(&format!("[{:?}] {}", code, detail))
 }
 
@@ -26,6 +27,8 @@ pub struct VerzikPackage {
     pub encrypted_file: Vec<u8>,
     pub encrypted_key: Vec<u8>,
     pub nonce: [u8; 12],
+    pub ciphertext_hash: String,
+    pub encryption_meta_hash: String,
 }
 
 #[wasm_bindgen]
@@ -66,10 +69,19 @@ pub fn encrypt_package(
     let mut nonce_arr = [0u8; 12];
     nonce_arr.copy_from_slice(nonce_bytes);
 
+    let ciphertext_hash = hash_doc(&encrypted_file);
+    
+    let mut meta_data = Vec::with_capacity(encrypted_key.len() + nonce_bytes.len());
+    meta_data.extend_from_slice(&encrypted_key);
+    meta_data.extend_from_slice(nonce_bytes);
+    let encryption_meta_hash = hash_doc(&meta_data);
+
     let package = VerzikPackage {
         encrypted_file,
         encrypted_key,
         nonce: nonce_arr,
+        ciphertext_hash,
+        encryption_meta_hash,
     };
 
     Ok(serde_wasm_bindgen::to_value(&package)?)
