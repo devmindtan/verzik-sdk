@@ -3,3 +3,4 @@ target/
 core_wasm/
 verzik_package.json
 *.bin 
+ts_wrapper/dist/
