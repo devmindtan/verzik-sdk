@@ -4,3 +4,17 @@ core_wasm/
 verzik_package.json
 *.bin 
 ts_wrapper/dist/
+
+# Environment files
+.env
+.env.*
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS Settings
+.DS_Store
