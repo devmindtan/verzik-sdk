@@ -9,6 +9,11 @@ import type { TorusNetworkOptions } from "./types";
  * @returns Chuỗi Public Key dạng hex (bắt đầu bằng 04)
  */
 export async function getPublicKeyFromEmail(email: string, options: TorusNetworkOptions): Promise<string> {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    throw new Error("Invalid email format.");
+  }
+
   const fetchNodeDetails = new NodeDetailManager({ network: options.network as any });
   const torus = new Torus({
     network: options.network as any,
