@@ -39,3 +39,15 @@ export interface ReWrapResult {
   encrypted_key: Uint8Array;
   encryption_meta_hash: string;
 }
+
+export interface RegisterPayload {
+  tenantId: string;
+  fileHash: string;
+  cid: string;
+  ciphertextHash: string;
+  encryptionMetaHash: string;
+  docType: number;
+  version: number;
+  nonce: number | string | bigint;
+  deadline: number | string | bigint;
+}

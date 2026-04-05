@@ -1,1 +1,2 @@
 *.js linguist-detectable=false
+ts_wrapper/test/** linguist-detectable=false
