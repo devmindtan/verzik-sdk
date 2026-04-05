@@ -19,6 +19,14 @@ export function encrypt(
   recipientPubKey: Uint8Array,
   options?: EncryptOptions,
 ): VerzikPackage {
+  if (
+    !(recipientPubKey instanceof Uint8Array) ||
+    !((recipientPubKey.length === 65 && recipientPubKey[0] === 0x04) ||
+      (recipientPubKey.length === 33 && (recipientPubKey[0] === 0x02 || recipientPubKey[0] === 0x03)))
+  ) {
+    throw new Error("Invalid Web3 public key format. Expected uncompressed (65 bytes, 0x04) or compressed (33 bytes, 0x02/0x03) SECP256k1 public key.");
+  }
+
   const aesKey = options?.aesKey ?? new Uint8Array(crypto.randomBytes(32));
   const nonce = options?.nonce ?? new Uint8Array(crypto.randomBytes(12));
 
@@ -40,6 +48,10 @@ export function encrypt(
  * @param privateKey Secp256k1 private key (32 bytes)
  */
 export function decrypt(pkg: VerzikPackage, privateKey: Uint8Array): Uint8Array {
+  if (!(privateKey instanceof Uint8Array) || privateKey.length !== 32) {
+    throw new Error("Invalid private key format. Expected 32-byte SECP256k1 private key.");
+  }
+
   return core.decrypt_package(
     pkg.encrypted_file,
     pkg.encrypted_key,
