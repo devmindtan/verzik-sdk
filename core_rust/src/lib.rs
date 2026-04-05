@@ -3,6 +3,7 @@ use wasm_bindgen::prelude::*;
 pub mod encrypt;
 pub mod keccak_hash;
 pub mod re_wrap;
+pub mod generate_tenant_id;
 
 #[wasm_bindgen]
 extern "C" {
