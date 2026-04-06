@@ -17,6 +17,7 @@ import {
   BlockchainClient,
   createBlockchainClient,
   createBlockchainClientFromEnv,
+  createRegisterPayload,
   init,
 } from "./config/blockchain.config";
 
@@ -36,6 +37,7 @@ export {
   BlockchainClient,
   createBlockchainClient,
   createBlockchainClientFromEnv,
+  createRegisterPayload,
   init,
 };
 
