@@ -58,3 +58,25 @@ export interface TenantInfo {
   isActive: boolean;
   createdAt: bigint;
 }
+
+export interface CoSignStatus {
+  coSignQualified: boolean;
+  coSignCount: number;
+  trustedCoSignCount: number;
+  trustedCoSignRoleMask: bigint;
+  requiredRoleMask: bigint;
+  minSigners: number;
+  minStake: bigint;
+}
+
+export interface RegisterPayload {
+  tenantId: string;
+  fileHash: string;
+  cid: string;
+  ciphertextHash: string;
+  encryptionMetaHash: string;
+  docType: number;
+  version: number;
+  nonce: bigint;
+  deadline: bigint;
+}
