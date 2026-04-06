@@ -30,7 +30,12 @@ export interface EncryptOptions {
 }
 
 export interface TorusNetworkOptions {
-  network: "sapphire_devnet" | "sapphire_mainnet" | "testnet" | "mainnet" | string;
+  network:
+    | "sapphire_devnet"
+    | "sapphire_mainnet"
+    | "testnet"
+    | "mainnet"
+    | string;
   clientId: string;
   verifier: string;
 }
@@ -40,14 +45,16 @@ export interface ReWrapResult {
   encryption_meta_hash: string;
 }
 
-export interface RegisterPayload {
-  tenantId: string;
-  fileHash: string;
-  cid: string;
-  ciphertextHash: string;
-  encryptionMetaHash: string;
-  docType: number;
-  version: number;
-  nonce: number | string | bigint;
-  deadline: number | string | bigint;
+export interface BlockchainConfig {
+  rpcUrl: string;
+  protocolAddress: string;
+  privateKey?: string;
+}
+
+export interface TenantInfo {
+  id: string;
+  admin: string;
+  treasury: string;
+  isActive: boolean;
+  createdAt: bigint;
 }
