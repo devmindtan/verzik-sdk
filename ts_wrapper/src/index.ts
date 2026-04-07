@@ -1,6 +1,7 @@
 import type {
   BlockchainConfig,
   EncryptOptions,
+  PublishAndSignDocumentResult,
   ReWrapResult,
   TenantInfo,
   VerzikEnvelope,
@@ -8,11 +9,13 @@ import type {
   VerzikMetadata,
   VerzikPackage,
   TorusNetworkOptions,
+  UploadDraftResponse,
 } from "./types";
 import { bytesToHex, hexToBytes, parseError } from "./utils";
 import { encrypt, decrypt, split, merge, hashDocument } from "./encrypt";
 import { reWrapKey } from "./re_wrap";
 import { getPublicKeyFromEmail } from "./identity";
+import { publishAndSignDocument } from "./sign";
 import {
   BlockchainClient,
   createBlockchainClient,
@@ -31,6 +34,8 @@ export type {
   VerzikMetadata,
   VerzikPackage,
   TorusNetworkOptions,
+  UploadDraftResponse,
+  PublishAndSignDocumentResult,
 };
 export { bytesToHex, hexToBytes, parseError };
 export {
@@ -39,6 +44,7 @@ export {
   createBlockchainClientFromEnv,
   createRegisterPayload,
   init,
+  publishAndSignDocument,
 };
 
 export class VerzikSDK {
@@ -48,6 +54,7 @@ export class VerzikSDK {
   static merge = merge;
   static hashDocument = hashDocument;
   static reWrapKey = reWrapKey;
+  static publishAndSignDocument = publishAndSignDocument;
 
   static ping(): void {
     const core = require("../core_wasm/verzik_sdk");

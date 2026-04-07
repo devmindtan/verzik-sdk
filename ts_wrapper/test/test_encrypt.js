@@ -58,6 +58,7 @@ async function testEncryptFlow() {
     console.log("\nBước 6: Merge lại →", isIntact ? "Toàn vẹn!" : "Sai lệch!");
 
     //console.log(envelope.encrypted_data, envelope.metadata) log with small file
+    
 
     
     // Đóng gói JSON thông tin Metadata (Sẽ đưa vào header)

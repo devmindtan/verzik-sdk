@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Verzik SDK - Upload & Sign Test</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b1020;
+        --panel: rgba(17, 24, 39, 0.82);
+        --panel-2: rgba(15, 23, 42, 0.94);
+        --border: rgba(148, 163, 184, 0.18);
+        --text: #e5eefc;
+        --muted: #94a3b8;
+        --primary: #7c3aed;
+        --primary-2: #22c55e;
+        --danger: #ef4444;
+        --shadow: 0 20px 60px rgba(2, 6, 23, 0.45);
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(124, 58, 237, 0.25), transparent 30%),
+          radial-gradient(circle at top right, rgba(34, 197, 94, 0.18), transparent 24%),
+          linear-gradient(180deg, #09101f 0%, #050816 100%);
+      }
+
+      .wrap {
+        width: min(1180px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 28px 0 40px;
+      }
+
+      .hero {
+        display: grid;
+        gap: 14px;
+        margin-bottom: 22px;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        width: fit-content;
+        padding: 8px 12px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: rgba(15, 23, 42, 0.72);
+        color: #c4b5fd;
+        font-size: 13px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(30px, 4vw, 48px);
+        line-height: 1.05;
+        letter-spacing: -0.04em;
+      }
+
+      .sub {
+        margin: 0;
+        max-width: 860px;
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1.6;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1.15fr 0.85fr;
+        gap: 18px;
+      }
+
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 22px;
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(14px);
+        overflow: hidden;
+      }
+
+      .card-header {
+        padding: 18px 20px;
+        border-bottom: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.02);
+      }
+
+      .card-header h2 {
+        margin: 0 0 4px;
+        font-size: 18px;
+      }
+
+      .card-header p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .card-body {
+        padding: 18px 20px 20px;
+      }
+
+      .form {
+        display: grid;
+        gap: 14px;
+      }
+
+      .row {
+        display: grid;
+        gap: 14px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .field {
+        display: grid;
+        gap: 8px;
+      }
+
+      .field label {
+        color: #cbd5e1;
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      input, textarea, select {
+        width: 100%;
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        background: var(--panel-2);
+        color: var(--text);
+        border-radius: 14px;
+        padding: 12px 14px;
+        outline: none;
+        transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+      }
+
+      input:focus, textarea:focus, select:focus {
+        border-color: rgba(124, 58, 237, 0.8);
+        box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.12);
+      }
+
+      textarea {
+        min-height: 106px;
+        resize: vertical;
+      }
+
+      .help {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 4px;
+      }
+
+      button {
+        appearance: none;
+        border: 0;
+        border-radius: 14px;
+        padding: 12px 16px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: transform 160ms ease, opacity 160ms ease, box-shadow 160ms ease;
+      }
+
+      button:hover { transform: translateY(-1px); }
+      button:disabled { cursor: not-allowed; opacity: 0.65; transform: none; }
+
+      .btn-primary {
+        color: white;
+        background: linear-gradient(135deg, var(--primary), #4f46e5);
+        box-shadow: 0 10px 24px rgba(79, 70, 229, 0.28);
+      }
+
+      .btn-secondary {
+        color: #e2e8f0;
+        background: rgba(148, 163, 184, 0.12);
+        border: 1px solid rgba(148, 163, 184, 0.18);
+      }
+
+      .status {
+        display: grid;
+        gap: 12px;
+      }
+
+      .stat {
+        padding: 14px;
+        border-radius: 16px;
+        background: rgba(15, 23, 42, 0.9);
+        border: 1px solid var(--border);
+      }
+
+      .stat .k {
+        display: block;
+        color: var(--muted);
+        font-size: 12px;
+        margin-bottom: 6px;
+      }
+
+      .stat .v {
+        font-size: 14px;
+        word-break: break-word;
+      }
+
+      pre {
+        margin: 0;
+        padding: 14px;
+        min-height: 220px;
+        max-height: 520px;
+        overflow: auto;
+        border-radius: 16px;
+        background: rgba(2, 6, 23, 0.92);
+        border: 1px solid rgba(148, 163, 184, 0.15);
+        color: #dbeafe;
+        font-size: 12px;
+        line-height: 1.55;
+      }
+
+      .chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 10px;
+        border-radius: 999px;
+        background: rgba(124, 58, 237, 0.12);
+        border: 1px solid rgba(124, 58, 237, 0.18);
+        font-size: 12px;
+        color: #ddd6fe;
+      }
+
+      .footer-note {
+        margin-top: 16px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      @media (max-width: 960px) {
+        .grid { grid-template-columns: 1fr; }
+      }
+
+      @media (max-width: 640px) {
+        .row { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <section class="hero">
+        <div class="badge">Verzik SDK · Upload + EIP-712 Sign Test</div>
+        <h1>Trang test ký MetaMask</h1>
+        <p class="sub">
+          Chạy trong trình duyệt để có thể mở popup của MetaMask. Node test script
+          không thể tự bật ví, vì không có <strong>window.ethereum</strong>.
+        </p>
+      </section>
+
+      <div class="grid">
+        <section class="card">
+          <div class="card-header">
+            <h2>1. Upload draft rồi ký</h2>
+            <p>Chỉ cần file + recipient. Phần hash và payload ký sẽ tự sinh để test popup MetaMask.</p>
+          </div>
+          <div class="card-body">
+            <div class="form">
+              <div class="row">
+                <div class="field">
+                  <label for="uploadUrl">Upload URL</label>
+                  <input id="uploadUrl" value="http://localhost:3000/api/v1/upload" />
+                </div>
+                <div class="field">
+                  <label for="verifyingContract">Verifying Contract</label>
+                  <input id="verifyingContract" value="0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6" />
+                </div>
+              </div>
+
+              <div class="row">
+                <div class="field">
+                  <label for="tenantId">tenantId</label>
+                  <input id="tenantId" value="0xe702fef210dc66faad0553ea8e2f5064188068f8052d2cd9c9611417db5c2705" />
+                </div>
+                <div class="field">
+                  <label for="recipientIdentifier">Recipients (email / ví / public key)</label>
+                  <input id="recipientIdentifier" placeholder="ngăn cách bằng dấu phẩy, ví dụ: a@gmail.com, b@gmail.com" />
+                </div>
+              </div>
+
+              <div class="row">
+                <div class="field">
+                  <label for="docType">docType</label>
+                  <input id="docType" type="number" value="1" />
+                </div>
+                <div class="field">
+                  <label for="version">version</label>
+                  <input id="version" type="number" value="1" />
+                </div>
+              </div>
+
+              <div class="row">
+                <div class="field">
+                  <label for="deadline">deadline</label>
+                  <input id="deadline" type="number" />
+                </div>
+                <div class="field">
+                  <label for="nonce">nonce (để trống sẽ query contract)</label>
+                  <input id="nonce" placeholder="optional" />
+                </div>
+              </div>
+
+              <div class="field">
+                <label for="fileInput">File upload</label>
+                <input id="fileInput" type="file" />
+                <div class="help">Không cần nhập ciphertextHash / encryptionMetaHash nữa. Page sẽ tự sinh để test flow.</div>
+              </div>
+
+              <div class="row">
+                <div class="field">
+                  <label>Tên field file</label>
+                  <input value="encrypted_file" disabled />
+                </div>
+                <div class="field">
+                  <label for="clientId">X-Client-Id</label>
+                  <input id="clientId" placeholder="vz_..." />
+                </div>
+              </div>
+
+              <div class="row">
+                <div class="field">
+                  <label for="clientDomain">X-Client-Domain</label>
+                  <input id="clientDomain" placeholder="localhost" />
+                </div>
+                <div class="field">
+                  <label for="uploadHeaders">Headers bổ sung (JSON, optional)</label>
+                  <textarea id="uploadHeaders" placeholder='{"X-Trace-Id":"abc"}'></textarea>
+                </div>
+              </div>
+
+              <div class="toolbar">
+                <button class="btn-secondary" id="connectBtn" type="button">Kết nối MetaMask</button>
+                <button class="btn-primary" id="runBtn" type="button">Upload & Sign</button>
+                <button class="btn-secondary" id="fillBtn" type="button">Điền mặc định</button>
+              </div>
+            </div>
+            <div class="footer-note">
+              Tip: có thể nhập nhiều recipient bằng dấu phẩy. Backend hiện nhận keys.encrypted_key kiểu string,
+              nên SDK sẽ gửi key đầu tiên vào encrypted_key và toàn bộ danh sách vào keys.recipient_keys.
+            </div>
+          </div>
+        </section>
+
+        <aside class="card">
+          <div class="card-header">
+            <h2>2. Trạng thái</h2>
+            <p>Ví, chainId, dữ liệu tự sinh và chữ ký sẽ hiện ở đây.</p>
+          </div>
+          <div class="card-body status">
+            <div class="chip-row">
+              <span class="chip" id="mmStatus">MetaMask: chưa kiểm tra</span>
+              <span class="chip" id="walletStatus">Wallet: chưa kết nối</span>
+            </div>
+
+            <div class="stat">
+              <span class="k">Signer</span>
+              <div class="v" id="signerAddress">-</div>
+            </div>
+            <div class="stat">
+              <span class="k">ChainId</span>
+              <div class="v" id="chainId">-</div>
+            </div>
+            <div class="stat">
+              <span class="k">Auto-generated hashes</span>
+              <div class="v" id="autoSummary">-</div>
+            </div>
+            <div class="stat">
+              <span class="k">Upload response</span>
+              <div class="v" id="uploadSummary">-</div>
+            </div>
+            <div class="stat">
+              <span class="k">Signature</span>
+              <div class="v" id="signatureBox">-</div>
+            </div>
+            <pre id="log">Sẵn sàng.</pre>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/ethers@6.16.0/dist/ethers.umd.min.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>

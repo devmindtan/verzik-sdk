@@ -77,6 +77,36 @@ export interface RegisterPayload {
   encryptionMetaHash: string;
   docType: number;
   version: number;
-  nonce: bigint;
-  deadline: bigint;
+  nonce: number | string | bigint;
+  deadline: number | string | bigint;
+}
+
+export interface UploadedDocumentResponse {
+  file_name: string;
+  original_hash: string;
+  cid: string;
+  metadata_cid: string;
+  file_cid: string;
+  directory_cid: string;
+  nonce: string;
+  draft_status: string;
+}
+
+export interface UploadDraftResponse {
+  status: string;
+  document: UploadedDocumentResponse;
+}
+
+export interface PublishAndSignDocumentResult {
+  upload: UploadDraftResponse;
+  payload: RegisterPayload;
+  signature: string;
+  signerAddress: string;
+  chainId: bigint;
+  domain: {
+    name: string;
+    version: string;
+    chainId: bigint;
+    verifyingContract: string;
+  };
 }

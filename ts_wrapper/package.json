@@ -12,7 +12,8 @@
     "build": "tsc",
     "build:wasm": "cd ../core_rust && wasm-pack build --target nodejs --out-dir ../ts_wrapper/core_wasm",
     "build:all": "npm run build:wasm && npm run build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:sign-ui": "node test/sign-ui/server.js"
   },
   "keywords": [
     "encryption",
