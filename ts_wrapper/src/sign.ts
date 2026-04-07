@@ -6,6 +6,8 @@ import type {
     UploadDraftResponse,
 } from "./types";
 
+type UploadHeaders = Record<string, string> | Array<[string, string]>;
+
 export interface PublishAndSignDocumentParams {
     uploadUrl: string;
     provider: ethers.Eip1193Provider;
@@ -21,7 +23,7 @@ export interface PublishAndSignDocumentParams {
     fileName?: string;
     fileFieldName?: string;
     extraFormFields?: Record<string, string>;
-    uploadHeaders?: HeadersInit;
+    uploadHeaders?: UploadHeaders;
     nonceResolver?: (context: {
         browserProvider: ethers.BrowserProvider;
         signerAddress: string;
@@ -59,7 +61,7 @@ async function uploadDraftDocument(
         fileName?: string;
         fileFieldName?: string;
         extraFormFields?: Record<string, string>;
-        uploadHeaders?: HeadersInit;
+        uploadHeaders?: UploadHeaders;
     }
 ): Promise<UploadDraftResponse> {
     const { blob, fileName } = normalizeUploadPayload(file, options?.fileName);

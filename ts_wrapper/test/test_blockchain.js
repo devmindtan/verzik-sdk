@@ -1,8 +1,13 @@
 require('dotenv').config({ path: '../.env' });
 const { ethers } = require("ethers");
+const fs = require("fs");
+const path = require("path");
 
 // Đọc ABI (Bác nhớ copy file VoucherProtocol.json của ông Tân vào nhé)
-const VoucherProtocolABI = require("../src/abi/VoucherProtocolModule#VoucherProtocol.json");
+const abiPath = fs.existsSync(path.join(__dirname, "../dist/abi/VoucherProtocolModule#VoucherProtocol.json"))
+    ? path.join(__dirname, "../dist/abi/VoucherProtocolModule#VoucherProtocol.json")
+    : path.join(__dirname, "../src/abi/VoucherProtocolModule#VoucherProtocol.json");
+const VoucherProtocolABI = require(abiPath);
 
 async function testConnection() {
     console.log("🔌 Đang kết nối tới Blockchain local...");

@@ -1,0 +1,3 @@
+# Intentionally empty.
+# This file prevents npm from falling back to the repository-level .gitignore.
+# Published files are controlled by the "files" field in package.json.

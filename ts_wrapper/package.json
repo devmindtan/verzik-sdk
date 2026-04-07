@@ -5,11 +5,12 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist/",
-    "core_wasm/"
+    "dist",
+    "core_wasm"
   ],
   "scripts": {
-    "build": "tsc",
+    "prepack": "rm -f core_wasm/package.json",
+    "build": "tsc && mkdir -p dist/abi && cp src/abi/*.json dist/abi/",
     "build:wasm": "cd ../core_rust && wasm-pack build --target nodejs --out-dir ../ts_wrapper/core_wasm",
     "build:all": "npm run build:wasm && npm run build",
     "typecheck": "tsc --noEmit",

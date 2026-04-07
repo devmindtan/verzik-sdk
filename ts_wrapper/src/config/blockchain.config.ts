@@ -1,13 +1,26 @@
 import dotenv from "dotenv";
-import VoucherProtocolABI from "../../src/abi/VoucherProtocolModule#VoucherProtocol.json";
-import { JsonRpcProvider, Wallet, Contract, parseEther } from "ethers";
+import VoucherProtocolABI from "../abi/VoucherProtocolModule#VoucherProtocol.json";
+import { JsonRpcProvider, Wallet, Contract, parseEther, keccak256 } from "ethers";
 import type {
   BlockchainConfig,
   TenantInfo,
   CoSignStatus,
   RegisterPayload,
 } from "../types";
-import { generate_tenant_id } from "../../core_wasm/verzik_sdk";
+
+function generateTenantId(name: string): string {
+  const timestamp = BigInt(Date.now());
+  const bytes = new TextEncoder().encode(name);
+  const encoded = new Uint8Array(bytes.length + 8);
+
+  encoded.set(bytes, 0);
+
+  for (let i = 0; i < 8; i += 1) {
+    encoded[bytes.length + i] = Number((timestamp >> BigInt((7 - i) * 8)) & 0xffn);
+  }
+
+  return keccak256(encoded);
+}
 
 dotenv.config();
 
@@ -99,7 +112,7 @@ export class BlockchainClient {
     }
 
     const tx = await this.contract.createTenant(
-      generate_tenant_id(tenantName),
+      generateTenantId(tenantName),
       adminAddress,
       treasuryAddress,
     );

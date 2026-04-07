@@ -24,7 +24,9 @@ async function checkBlockchain() {
     console.log("\n🔍 Đang trích xuất dữ liệu từ Smart Contract...");
     const contractAddress = "0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6"; // Lấy từ Notion
     
-    const abiPath = path.join(__dirname, "../src/abi/VoucherProtocolModule#VoucherProtocol.json");
+    const abiPath = fs.existsSync(path.join(__dirname, "../dist/abi/VoucherProtocolModule#VoucherProtocol.json"))
+        ? path.join(__dirname, "../dist/abi/VoucherProtocolModule#VoucherProtocol.json")
+        : path.join(__dirname, "../src/abi/VoucherProtocolModule#VoucherProtocol.json");
     const abiFile = JSON.parse(fs.readFileSync(abiPath, "utf8"));
     const abi = abiFile.abi || abiFile;
     const contract = new ethers.Contract(contractAddress, abi, provider);
