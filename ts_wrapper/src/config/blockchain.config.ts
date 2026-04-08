@@ -1,26 +1,18 @@
 import dotenv from "dotenv";
 import VoucherProtocolABI from "../abi/VoucherProtocolModule#VoucherProtocol.json";
-import { JsonRpcProvider, Wallet, Contract, parseEther, keccak256 } from "ethers";
+import VoucherProtocolReaderABI from "../abi/VoucherProtocolModule#VoucherProtocolReader.json";
+
+import { JsonRpcProvider, Wallet, Contract, parseEther } from "ethers";
 import type {
   BlockchainConfig,
   TenantInfo,
   CoSignStatus,
   RegisterPayload,
+  OperatorStatus,
+  DocumentSnapshot,
+  VerifyStatus,
 } from "../types";
-
-function generateTenantId(name: string): string {
-  const timestamp = BigInt(Date.now());
-  const bytes = new TextEncoder().encode(name);
-  const encoded = new Uint8Array(bytes.length + 8);
-
-  encoded.set(bytes, 0);
-
-  for (let i = 0; i < 8; i += 1) {
-    encoded[bytes.length + i] = Number((timestamp >> BigInt((7 - i) * 8)) & 0xffn);
-  }
-
-  return keccak256(encoded);
-}
+import { generate_tenant_id } from "../../core_wasm/verzik_sdk";
 
 dotenv.config();
 
@@ -29,14 +21,16 @@ const CHAIN_ID = process.env.CHAIN_ID?.trim() ?? 31337;
 export class BlockchainClient {
   private readonly provider: JsonRpcProvider;
   private readonly wallet?: Wallet;
-  private readonly contract: Contract;
+  private readonly protocolContract: Contract;
+  private readonly readerContract: Contract;
 
   constructor(config: BlockchainConfig) {
     const rpcUrl = config.rpcUrl?.trim();
     const protocolAddress = config.protocolAddress?.trim();
+    const readerAddress = config.readerAddress?.trim() ?? protocolAddress;
     const privateKey = config.privateKey?.trim();
 
-    if (!rpcUrl || !protocolAddress) {
+    if (!rpcUrl || !protocolAddress || !readerAddress) {
       throw new Error(
         "Thiếu cấu hình blockchain (rpcUrl hoặc protocolAddress)",
       );
@@ -46,17 +40,22 @@ export class BlockchainClient {
 
     if (privateKey) {
       this.wallet = new Wallet(privateKey, this.provider);
-      this.contract = new Contract(
+      this.protocolContract = new Contract(
         protocolAddress,
         VoucherProtocolABI.abi,
         this.wallet,
       );
-      return;
+    } else {
+      this.protocolContract = new Contract(
+        protocolAddress,
+        VoucherProtocolABI.abi,
+        this.provider,
+      );
     }
 
-    this.contract = new Contract(
-      protocolAddress,
-      VoucherProtocolABI.abi,
+    this.readerContract = new Contract(
+      readerAddress,
+      VoucherProtocolReaderABI.abi,
       this.provider,
     );
   }
@@ -66,19 +65,38 @@ export class BlockchainClient {
   }
 
   get instance(): Contract {
-    return this.contract;
+    return this.protocolContract;
+  }
+
+  get reader(): Contract {
+    return this.readerContract;
   }
 
   async getTenantCount(): Promise<bigint> {
-    return (await this.contract.getTenantCount()) as bigint;
+    return (await this.readerContract.getTenantCount()) as bigint;
+  }
+  async getOperatorCount(tenantId: string): Promise<bigint> {
+    return (await this.readerContract.getOperatorCount(tenantId)) as bigint;
   }
 
   async getTenantIds(start = 0, limit = 10): Promise<string[]> {
-    return (await this.contract.getTenantIds(start, limit)) as string[];
+    return (await this.readerContract.getTenantIds(start, limit)) as string[];
+  }
+
+  async getOperatorIds(
+    tenantId: string,
+    start = 0,
+    limit = 10,
+  ): Promise<string[]> {
+    return (await this.readerContract.getOperatorIds(
+      tenantId,
+      start,
+      limit,
+    )) as string[];
   }
 
   async getTenantInfo(id: string): Promise<TenantInfo | null> {
-    const info = (await this.contract.getTenantInfo(id)) as TenantTuple;
+    const info = (await this.readerContract.getTenantInfo(id)) as TenantTuple;
     const [exists, admin, treasury, isActive, createdAt] = info;
 
     if (!exists) {
@@ -94,6 +112,30 @@ export class BlockchainClient {
     };
   }
 
+  async listOperators(
+    tenantId: string,
+    start = 0,
+    limit = 10,
+  ): Promise<OperatorStatus[]> {
+    try {
+      const operatorAddresses = await this.readerContract.getOperatorIds(
+        tenantId,
+        start,
+        limit,
+      );
+
+      const operators = await Promise.all(
+        operatorAddresses.map((address: string) =>
+          this.readerContract.getOperatorStatus(tenantId, address),
+        ),
+      );
+
+      return operators.filter((op) => op.exists);
+    } catch (error) {
+      throw new Error("Lỗi khi lấy danh sách Operator: " + error);
+    }
+  }
+
   async listTenants(start = 0, limit = 10): Promise<TenantInfo[]> {
     const ids = await this.getTenantIds(start, limit);
     const tenants = await Promise.all(ids.map((id) => this.getTenantInfo(id)));
@@ -107,12 +149,12 @@ export class BlockchainClient {
   ): Promise<string> {
     if (!this.wallet) {
       throw new Error(
-        "Client chưa có privateKey nên không thể gửi transaction",
+        "Client chưa có privateKey nên không thể gửi transaction ",
       );
     }
 
-    const tx = await this.contract.createTenant(
-      generateTenantId(tenantName),
+    const tx = await this.protocolContract.createTenant(
+      generate_tenant_id(tenantName),
       adminAddress,
       treasuryAddress,
     );
@@ -125,13 +167,42 @@ export class BlockchainClient {
     stakeAmount: string,
   ) {
     try {
-      const tx = await this.contract.joinAsOperator(tenantId, _metadataURI, {
-        value: parseEther(stakeAmount),
-      });
+      const tx = await this.protocolContract.joinAsOperator(
+        tenantId,
+        _metadataURI,
+        {
+          value: parseEther(stakeAmount),
+        },
+      );
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
       throw new Error("Lỗi gia nhập Operator: " + error);
+    }
+  }
+
+  async getOperatorStatus(
+    tenantId: string,
+    operator: string,
+  ): Promise<OperatorStatus> {
+    try {
+      const operatorStatus = await this.readerContract.getOperatorStatus(
+        tenantId,
+        operator,
+      );
+
+      return {
+        exists: operatorStatus.exists,
+        isActive: operatorStatus.isActive,
+        metadataURI: operatorStatus.metadataURI,
+        stakeAmount: operatorStatus.stakeAmount,
+        nonce: operatorStatus.nonce,
+        unstakeReadyAt: operatorStatus.unstakeReadyAt,
+        canUnstakeNow: operatorStatus.canUnstakeNow,
+        recoveryDelegate: operatorStatus.recoveryDelegate,
+      };
+    } catch (error) {
+      throw new Error("Could not fetch operator data " + error);
     }
   }
 
@@ -144,7 +215,7 @@ export class BlockchainClient {
         name: "VoucherProtocol",
         version: "1",
         chainId: CHAIN_ID,
-        verifyingContract: this.contract.target as string,
+        verifyingContract: this.protocolContract.target as string,
       };
 
       const types = {
@@ -166,13 +237,81 @@ export class BlockchainClient {
         types,
         payload,
       );
-      const tx = await this.contract.registerWithSignature(payload, signature);
+      const tx = await this.protocolContract.registerWithSignature(
+        payload,
+        signature,
+      );
 
       const receipt = await tx.wait();
 
       return receipt.hash;
     } catch (error) {
       throw new Error("" + error);
+    }
+  }
+
+  async getDocumentStatus(
+    tenantId: string,
+    fileHash: string,
+  ): Promise<DocumentSnapshot> {
+    try {
+      const documentStatus = await this.readerContract.getDocumentStatus(
+        tenantId,
+        fileHash,
+      );
+      return {
+        exists: documentStatus.exists,
+        isValid: documentStatus.isValid,
+        issuer: documentStatus.issuer,
+        cid: documentStatus.cid,
+        timestamp: documentStatus.timestamp,
+        ciphertextHash: documentStatus.ciphertextHash,
+        encryptionMetaHash: documentStatus.encryptionMetaHash,
+        docType: documentStatus.docType,
+        version: documentStatus.version,
+        coSignCount: documentStatus.coSignCount,
+        trustedCoSignCount: documentStatus.trustedCoSignCount,
+        trustedCoSignRoleMask: documentStatus.trustedCoSignRoleMask,
+        coSignQualified: documentStatus.coSignQualified,
+      };
+    } catch (error) {
+      throw new Error(" " + error);
+    }
+  }
+
+  async isDocumentCoSignQualified(
+    tenantId: string,
+    fileHash: string,
+  ): Promise<boolean> {
+    try {
+      const isQualified = await this.readerContract.isDocumentCoSignQualified(
+        tenantId,
+        fileHash,
+      );
+      return isQualified;
+    } catch (error) {
+      throw new Error(" " + error);
+    }
+  }
+
+  /**
+   * @notice Thu hồi hiệu lực tài liệu bởi tenant admin hoặc issuer.
+   */
+  async revokeDocument(
+    tenantId: string,
+    fileHash: string,
+    reason: string,
+  ): Promise<string> {
+    try {
+      const tx = await this.protocolContract.revokeDocument(
+        tenantId,
+        fileHash,
+        reason,
+      );
+      const receipt = await tx.wait();
+      return receipt.hash;
+    } catch (error) {
+      throw new Error(" " + error);
     }
   }
 
@@ -183,11 +322,14 @@ export class BlockchainClient {
    */
   async getNonce(tenantId: string, operatorAddress: string): Promise<bigint> {
     try {
-      const nonce = await this.contract.nonces(tenantId, operatorAddress);
+      const nonce = await this.protocolContract.nonces(
+        tenantId,
+        operatorAddress,
+      );
 
       return BigInt(nonce);
     } catch (error) {
-      throw new Error("Lỗi khi lấy Nonce: " + error);
+      throw new Error("" + error);
     }
   }
 
@@ -196,7 +338,10 @@ export class BlockchainClient {
     fileHash: string,
   ): Promise<CoSignStatus> {
     try {
-      const result = await this.contract.getCoSignStatus(tenantId, fileHash);
+      const result = await this.readerContract.getCoSignStatus(
+        tenantId,
+        fileHash,
+      );
       return {
         coSignQualified: result[0],
         coSignCount: Number(result[1]),
@@ -212,6 +357,16 @@ export class BlockchainClient {
       );
     }
   }
+
+  async verify(tenantId: string, fileHash: string): Promise<VerifyStatus> {
+    try {
+      const verifyStatus = await this.readerContract.verify(tenantId, fileHash);
+
+      return verifyStatus;
+    } catch (error) {
+      throw new Error(" " + error);
+    }
+  }
 }
 
 export function createBlockchainClient(
@@ -224,6 +379,7 @@ export function createBlockchainClientFromEnv(): BlockchainClient {
   const rpcUrl = process.env.RPC_URL?.trim();
   const privateKey = process.env.PRIVATE_KEY?.trim();
   const protocolAddress = process.env.PROTOCOL_ADDRESS?.trim();
+  const readerAddress = process.env.READER_ADDRESS?.trim();
 
   if (!rpcUrl || !protocolAddress) {
     throw new Error(
@@ -235,6 +391,7 @@ export function createBlockchainClientFromEnv(): BlockchainClient {
     rpcUrl,
     privateKey,
     protocolAddress,
+    readerAddress,
   });
 }
 
