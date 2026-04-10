@@ -167,8 +167,8 @@ export async function publishAndSignDocument(
 
     const payload: RegisterPayload = {
         tenantId: params.tenantId,
-        fileHash: upload.document.original_hash,
-        cid: upload.document.metadata_cid,
+        fileHash: upload.document!.original_hash,
+        cid: upload.document!.metadata_cid,
         ciphertextHash: params.ciphertextHash,
         encryptionMetaHash: params.encryptionMetaHash,
         docType: params.docType,

@@ -121,4 +121,27 @@ export interface TenantConfig {
   operatorManager: string;
   minStake: string;
   unstakeCooldown: bigint;
+
+export interface UploadDraftResponse {
+  status: "success" | "error" | string;
+  document?: {
+    original_hash: string;
+    metadata_cid: string;
+    [key: string]: any;
+  };
+  [key: string]: any;
+}
+
+export interface PublishAndSignDocumentResult {
+  upload: UploadDraftResponse;
+  payload: RegisterPayload;
+  signature: string;
+  signerAddress: string;
+  chainId: bigint | number;
+  domain: {
+    name: string;
+    version: string;
+    chainId: bigint | number;
+    verifyingContract: string;
+  };
 }
