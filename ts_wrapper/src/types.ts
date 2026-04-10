@@ -115,6 +115,12 @@ export interface VerifyStatus {
   issuer: string;
   cid: string;
 }
+export interface TenantConfig {
+  admin: string;
+  slasher: string;
+  operatorManager: string;
+  minStake: string;
+  unstakeCooldown: bigint;
 
 export interface UploadDraftResponse {
   status: "success" | "error" | string;

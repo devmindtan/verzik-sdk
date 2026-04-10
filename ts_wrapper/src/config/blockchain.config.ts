@@ -11,6 +11,7 @@ import type {
   OperatorStatus,
   DocumentSnapshot,
   VerifyStatus,
+  TenantConfig,
 } from "../types";
 import { generate_tenant_id } from "../../core_wasm/verzik_sdk";
 
@@ -72,9 +73,12 @@ export class BlockchainClient {
     return this.readerContract;
   }
 
+  // --- Base (only-view) ---
+
   async getTenantCount(): Promise<bigint> {
     return (await this.readerContract.getTenantCount()) as bigint;
   }
+
   async getOperatorCount(tenantId: string): Promise<bigint> {
     return (await this.readerContract.getOperatorCount(tenantId)) as bigint;
   }
@@ -142,45 +146,6 @@ export class BlockchainClient {
     return tenants.filter((tenant): tenant is TenantInfo => tenant !== null);
   }
 
-  async createTenant(
-    tenantName: string,
-    adminAddress: string,
-    treasuryAddress: string,
-  ): Promise<string> {
-    if (!this.wallet) {
-      throw new Error(
-        "Client chưa có privateKey nên không thể gửi transaction ",
-      );
-    }
-
-    const tx = await this.protocolContract.createTenant(
-      generate_tenant_id(tenantName),
-      adminAddress,
-      treasuryAddress,
-    );
-    return tx.hash as string;
-  }
-
-  async joinAsOperator(
-    tenantId: string,
-    _metadataURI: string,
-    stakeAmount: string,
-  ) {
-    try {
-      const tx = await this.protocolContract.joinAsOperator(
-        tenantId,
-        _metadataURI,
-        {
-          value: parseEther(stakeAmount),
-        },
-      );
-      const receipt = await tx.wait();
-      return receipt.hash as string;
-    } catch (error) {
-      throw new Error("Lỗi gia nhập Operator: " + error);
-    }
-  }
-
   async getOperatorStatus(
     tenantId: string,
     operator: string,
@@ -203,50 +168,6 @@ export class BlockchainClient {
       };
     } catch (error) {
       throw new Error("Could not fetch operator data " + error);
-    }
-  }
-
-  async registerWithSignature(payload: RegisterPayload): Promise<string> {
-    try {
-      if (!this.wallet) throw new Error("Cần Private Key để ký!");
-
-      // Định nghĩa Domain
-      const domain = {
-        name: "VoucherProtocol",
-        version: "1",
-        chainId: CHAIN_ID,
-        verifyingContract: this.protocolContract.target as string,
-      };
-
-      const types = {
-        Register: [
-          { name: "tenantId", type: "bytes32" },
-          { name: "fileHash", type: "bytes32" },
-          { name: "cid", type: "string" },
-          { name: "ciphertextHash", type: "bytes32" },
-          { name: "encryptionMetaHash", type: "bytes32" },
-          { name: "docType", type: "uint32" },
-          { name: "version", type: "uint32" },
-          { name: "nonce", type: "uint256" },
-          { name: "deadline", type: "uint256" },
-        ],
-      };
-
-      const signature = await this.wallet?.signTypedData(
-        domain,
-        types,
-        payload,
-      );
-      const tx = await this.protocolContract.registerWithSignature(
-        payload,
-        signature,
-      );
-
-      const receipt = await tx.wait();
-
-      return receipt.hash;
-    } catch (error) {
-      throw new Error("" + error);
     }
   }
 
@@ -279,6 +200,42 @@ export class BlockchainClient {
     }
   }
 
+  async verify(tenantId: string, fileHash: string): Promise<VerifyStatus> {
+    try {
+      return (await this.readerContract.verify(
+        tenantId,
+        fileHash,
+      )) as VerifyStatus;
+    } catch (error) {
+      throw new Error(" " + error);
+    }
+  }
+
+  async getDocumentOrRevert(
+    tenantId: string,
+    fileHash: string,
+  ): Promise<unknown> {
+    try {
+      return await this.readerContract.getDocumentOrRevert(tenantId, fileHash);
+    } catch (error) {
+      throw new Error(" " + error);
+    }
+  }
+
+  async hasSignedDocument(
+    tenantId: string,
+    fileHash: string,
+    signer: string,
+  ): Promise<boolean> {
+    try {
+      return Boolean(
+        await this.readerContract.hasSignedDocument(tenantId, fileHash, signer),
+      );
+    } catch (error) {
+      throw new Error(" " + error);
+    }
+  }
+
   async isDocumentCoSignQualified(
     tenantId: string,
     fileHash: string,
@@ -291,45 +248,6 @@ export class BlockchainClient {
       return isQualified;
     } catch (error) {
       throw new Error(" " + error);
-    }
-  }
-
-  /**
-   * @notice Thu hồi hiệu lực tài liệu bởi tenant admin hoặc issuer.
-   */
-  async revokeDocument(
-    tenantId: string,
-    fileHash: string,
-    reason: string,
-  ): Promise<string> {
-    try {
-      const tx = await this.protocolContract.revokeDocument(
-        tenantId,
-        fileHash,
-        reason,
-      );
-      const receipt = await tx.wait();
-      return receipt.hash;
-    } catch (error) {
-      throw new Error(" " + error);
-    }
-  }
-
-  /**
-   * @notice Lấy nonce hiện tại của một operator trong một tenant cụ thể.
-   * @param tenantId ID của tenant (bytes32)
-   * @param operatorAddress Địa chỉ ví của operator
-   */
-  async getNonce(tenantId: string, operatorAddress: string): Promise<bigint> {
-    try {
-      const nonce = await this.protocolContract.nonces(
-        tenantId,
-        operatorAddress,
-      );
-
-      return BigInt(nonce);
-    } catch (error) {
-      throw new Error("" + error);
     }
   }
 
@@ -358,11 +276,515 @@ export class BlockchainClient {
     }
   }
 
-  async verify(tenantId: string, fileHash: string): Promise<VerifyStatus> {
+  async getNonce(tenantId: string, operatorAddress: string): Promise<bigint> {
     try {
-      const verifyStatus = await this.readerContract.verify(tenantId, fileHash);
+      const nonce = await this.protocolContract.nonces(
+        tenantId,
+        operatorAddress,
+      );
+      return BigInt(nonce);
+    } catch (error) {
+      throw new Error("" + error);
+    }
+  }
 
-      return verifyStatus;
+  async getCoSignPolicy(
+    tenantId: string,
+    docType: number,
+  ): Promise<{
+    enabled: boolean;
+    minStake: bigint;
+    minSigners: bigint;
+    requiredRoleMask: bigint;
+  }> {
+    try {
+      const result = await this.readerContract.getCoSignPolicy(
+        tenantId,
+        docType,
+      );
+      return {
+        enabled: Boolean(result[0]),
+        minStake: BigInt(result[1]),
+        minSigners: BigInt(result[2]),
+        requiredRoleMask: BigInt(result[3]),
+      };
+    } catch (error) {
+      throw new Error(" " + error);
+    }
+  }
+
+  async getCoSignOperatorConfig(
+    tenantId: string,
+    docType: number,
+    operator: string,
+  ): Promise<{ whitelisted: boolean; roleId: number }> {
+    try {
+      const result = await this.readerContract.getCoSignOperatorConfig(
+        tenantId,
+        docType,
+        operator,
+      );
+      return {
+        whitelisted: Boolean(result[0]),
+        roleId: Number(result[1]),
+      };
+    } catch (error) {
+      throw new Error(" " + error);
+    }
+  }
+
+  async getTenantRuntimeConfig(
+    tenantId: string,
+  ): Promise<{ minOperatorStake: bigint; unstakeCooldown: bigint }> {
+    try {
+      const result = await this.readerContract.getTenantRuntimeConfig(tenantId);
+      return {
+        minOperatorStake: BigInt(result[0]),
+        unstakeCooldown: BigInt(result[1]),
+      };
+    } catch (error) {
+      throw new Error(" " + error);
+    }
+  }
+
+  async getViolationPenalty(
+    tenantId: string,
+    violationCode: string,
+  ): Promise<number> {
+    try {
+      const penaltyBps = await this.readerContract.getViolationPenalty(
+        tenantId,
+        violationCode,
+      );
+      return Number(penaltyBps);
+    } catch (error) {
+      throw new Error(" " + error);
+    }
+  }
+
+  // --- OWNER PROTOCOL ---
+
+  async createTenant(
+    tenantName: string,
+    treasuryAddress: string,
+    config: TenantConfig,
+  ): Promise<string> {
+    if (!this.wallet) {
+      throw new Error(
+        "Client chưa có privateKey nên không thể gửi transaction ",
+      );
+    }
+
+    const tx = await this.protocolContract.createTenant(
+      generate_tenant_id(tenantName),
+      treasuryAddress,
+      {
+        admin: config.admin,
+        slasher: config.slasher,
+        operatorManager: config.operatorManager,
+        minStake: parseEther(config.minStake),
+        unstakeCooldown: config.unstakeCooldown,
+      },
+    );
+    const receipt = await tx.wait();
+    return receipt.hash as string;
+  }
+
+  async setTenantStatus(tenantId: string, isActive: boolean): Promise<string> {
+    try {
+      const tx = await this.protocolContract.setTenantStatus(
+        tenantId,
+        isActive,
+      );
+      const receipt = await tx.wait();
+      return receipt.hash as string;
+    } catch (error) {
+      throw new Error(" " + error);
+    }
+  }
+
+  // --- OPERATOR ---
+
+  async joinAsOperator(
+    tenantId: string,
+    metadataURI: string,
+    stakeAmount: string,
+  ): Promise<string> {
+    try {
+      const tx = await this.protocolContract.joinAsOperator(
+        tenantId,
+        metadataURI,
+        {
+          value: parseEther(stakeAmount),
+        },
+      );
+      const receipt = await tx.wait();
+      return receipt.hash as string;
+    } catch (error) {
+      throw new Error("Lỗi gia nhập Operator: " + error);
+    }
+  }
+
+  async topUpStake(tenantId: string, stakeAmount: string): Promise<string> {
+    try {
+      const tx = await this.protocolContract.topUpStake(tenantId, {
+        value: parseEther(stakeAmount),
+      });
+      const receipt = await tx.wait();
+      return receipt.hash as string;
+    } catch (error) {
+      throw new Error(" " + error);
+    }
+  }
+
+  async updateOperatorMetadata(
+    tenantId: string,
+    metadataURI: string,
+  ): Promise<string> {
+    try {
+      const tx = await this.protocolContract.updateOperatorMetadata(
+        tenantId,
+        metadataURI,
+      );
+      const receipt = await tx.wait();
+      return receipt.hash as string;
+    } catch (error) {
+      throw new Error(" " + error);
+    }
+  }
+
+  async requestUnstake(tenantId: string): Promise<string> {
+    try {
+      const tx = await this.protocolContract.requestUnstake(tenantId);
+      const receipt = await tx.wait();
+      return receipt.hash as string;
+    } catch (error) {
+      throw new Error(" " + error);
+    }
+  }
+
+  async executeUnstake(tenantId: string): Promise<string> {
+    try {
+      const tx = await this.protocolContract.executeUnstake(tenantId);
+      const receipt = await tx.wait();
+      return receipt.hash as string;
+    } catch (error) {
+      throw new Error(" " + error);
+    }
+  }
+
+  async registerWithSignature(payload: RegisterPayload): Promise<string> {
+    try {
+      if (!this.wallet) throw new Error("Cần Private Key để ký!");
+
+      const domain = {
+        name: "VoucherProtocol",
+        version: "1",
+        chainId: CHAIN_ID,
+        verifyingContract: this.protocolContract.target as string,
+      };
+
+      const types = {
+        Register: [
+          { name: "tenantId", type: "bytes32" },
+          { name: "fileHash", type: "bytes32" },
+          { name: "cid", type: "string" },
+          { name: "ciphertextHash", type: "bytes32" },
+          { name: "encryptionMetaHash", type: "bytes32" },
+          { name: "docType", type: "uint32" },
+          { name: "version", type: "uint32" },
+          { name: "nonce", type: "uint256" },
+          { name: "deadline", type: "uint256" },
+        ],
+      };
+
+      const signature = await this.wallet.signTypedData(domain, types, payload);
+      const tx = await this.protocolContract.registerWithSignature(
+        payload,
+        signature,
+      );
+      const receipt = await tx.wait();
+
+      return receipt.hash as string;
+    } catch (error) {
+      throw new Error("" + error);
+    }
+  }
+
+  async coSignDocumentWithSignature(payload: {
+    tenantId: string;
+    fileHash: string;
+    nonce: bigint;
+    deadline: bigint;
+  }): Promise<string> {
+    try {
+      if (!this.wallet) throw new Error("Cần Private Key để ký!");
+
+      const domain = {
+        name: "VoucherProtocol",
+        version: "1",
+        chainId: CHAIN_ID,
+        verifyingContract: this.protocolContract.target as string,
+      };
+
+      const types = {
+        CoSign: [
+          { name: "tenantId", type: "bytes32" },
+          { name: "fileHash", type: "bytes32" },
+          { name: "nonce", type: "uint256" },
+          { name: "deadline", type: "uint256" },
+        ],
+      };
+
+      const signature = await this.wallet.signTypedData(domain, types, payload);
+      const tx = await this.protocolContract.coSignDocumentWithSignature(
+        payload,
+        signature,
+      );
+      const receipt = await tx.wait();
+      return receipt.hash as string;
+    } catch (error) {
+      throw new Error(" " + error);
+    }
+  }
+
+  async setRecoveryDelegate(
+    tenantId: string,
+    delegate: string,
+  ): Promise<string> {
+    try {
+      const tx = await this.protocolContract.setRecoveryDelegate(
+        tenantId,
+        delegate,
+      );
+      const receipt = await tx.wait();
+      return receipt.hash as string;
+    } catch (error) {
+      throw new Error(" " + error);
+    }
+  }
+
+  async recoverOperatorByDelegate(
+    tenantId: string,
+    lostOperator: string,
+    reason: string,
+  ): Promise<string> {
+    try {
+      const tx = await this.protocolContract.recoverOperatorByDelegate(
+        tenantId,
+        lostOperator,
+        reason,
+      );
+      const receipt = await tx.wait();
+      return receipt.hash as string;
+    } catch (error) {
+      throw new Error(" " + error);
+    }
+  }
+
+  // --- TENANT ADMIN ---
+
+  async setTreasury(tenantId: string, newTreasury: string): Promise<string> {
+    try {
+      const tx = await this.protocolContract.setTreasury(tenantId, newTreasury);
+      const receipt = await tx.wait();
+      return receipt.hash as string;
+    } catch (error) {
+      throw new Error(" " + error);
+    }
+  }
+
+  async revokeDocument(
+    tenantId: string,
+    fileHash: string,
+    reason: string,
+  ): Promise<string> {
+    try {
+      const tx = await this.protocolContract.revokeDocument(
+        tenantId,
+        fileHash,
+        reason,
+      );
+      const receipt = await tx.wait();
+      return receipt.hash as string;
+    } catch (error) {
+      throw new Error(" " + error);
+    }
+  }
+
+  // --- TENANT SLAHER ---
+
+  async slashOperator(
+    tenantId: string,
+    operator: string,
+    reason: string,
+  ): Promise<string> {
+    try {
+      const tx = await this.protocolContract.slashOperator(
+        tenantId,
+        operator,
+        reason,
+      );
+      const receipt = await tx.wait();
+      return receipt.hash as string;
+    } catch (error) {
+      throw new Error(" " + error);
+    }
+  }
+
+  async softSlashOperator(
+    tenantId: string,
+    operator: string,
+    violationCode: string,
+    reason: string,
+  ): Promise<string> {
+    try {
+      const tx = await this.protocolContract.softSlashOperator(
+        tenantId,
+        operator,
+        violationCode,
+        reason,
+      );
+      const receipt = await tx.wait();
+      return receipt.hash as string;
+    } catch (error) {
+      throw new Error(" " + error);
+    }
+  }
+
+  // --- Tenant operator manager ---
+
+  async setOperatorStatus(
+    tenantId: string,
+    operator: string,
+    isActive: boolean,
+    reason: string,
+  ): Promise<string> {
+    try {
+      const tx = await this.protocolContract.setOperatorStatus(
+        tenantId,
+        operator,
+        isActive,
+        reason,
+      );
+      const receipt = await tx.wait();
+      return receipt.hash as string;
+    } catch (error) {
+      throw new Error(" " + error);
+    }
+  }
+
+  async recoverOperatorByAdmin(
+    tenantId: string,
+    lostOperator: string,
+    newOperator: string,
+    reason: string,
+  ): Promise<string> {
+    try {
+      const tx = await this.protocolContract.recoverOperatorByAdmin(
+        tenantId,
+        lostOperator,
+        newOperator,
+        reason,
+      );
+      const receipt = await tx.wait();
+      return receipt.hash as string;
+    } catch (error) {
+      throw new Error(" " + error);
+    }
+  }
+
+  async setCoSignPolicy(
+    tenantId: string,
+    docType: number,
+    enabled: boolean,
+    minStake: bigint,
+    minSigners: bigint,
+    requiredRoleMask: bigint,
+  ): Promise<string> {
+    try {
+      const tx = await this.protocolContract.setCoSignPolicy(
+        tenantId,
+        docType,
+        enabled,
+        minStake,
+        minSigners,
+        requiredRoleMask,
+      );
+      const receipt = await tx.wait();
+      return receipt.hash as string;
+    } catch (error) {
+      throw new Error(" " + error);
+    }
+  }
+
+  async setCoSignOperator(
+    tenantId: string,
+    docType: number,
+    operator: string,
+    whitelisted: boolean,
+    roleId: number,
+  ): Promise<string> {
+    try {
+      const tx = await this.protocolContract.setCoSignOperator(
+        tenantId,
+        docType,
+        operator,
+        whitelisted,
+        roleId,
+      );
+      const receipt = await tx.wait();
+      return receipt.hash as string;
+    } catch (error) {
+      throw new Error(" " + error);
+    }
+  }
+
+  async setMinOperatorStake(
+    tenantId: string,
+    newMinOperatorStake: bigint,
+  ): Promise<string> {
+    try {
+      const tx = await this.protocolContract.setMinOperatorStake(
+        tenantId,
+        newMinOperatorStake,
+      );
+      const receipt = await tx.wait();
+      return receipt.hash as string;
+    } catch (error) {
+      throw new Error(" " + error);
+    }
+  }
+
+  async setUnstakeCooldown(
+    tenantId: string,
+    newUnstakeCooldown: bigint,
+  ): Promise<string> {
+    try {
+      const tx = await this.protocolContract.setUnstakeCooldown(
+        tenantId,
+        newUnstakeCooldown,
+      );
+      const receipt = await tx.wait();
+      return receipt.hash as string;
+    } catch (error) {
+      throw new Error(" " + error);
+    }
+  }
+
+  async setViolationPenalty(
+    tenantId: string,
+    violationCode: string,
+    penaltyBps: number,
+  ): Promise<string> {
+    try {
+      const tx = await this.protocolContract.setViolationPenalty(
+        tenantId,
+        violationCode,
+        penaltyBps,
+      );
+      const receipt = await tx.wait();
+      return receipt.hash as string;
     } catch (error) {
       throw new Error(" " + error);
     }
