@@ -1,3 +1,5 @@
+import type { Block, TransactionReceipt, TransactionResponse } from "ethers";
+
 export interface VerzikPackage {
   encrypted_file: Uint8Array;
   encrypted_key: Uint8Array;
@@ -47,14 +49,22 @@ export interface ReWrapResult {
 
 export interface BlockchainConfig {
   rpcUrl: string;
+  /** VoucherProtocol main contract address */
   protocolAddress: string;
+  /** VoucherProtocolReader contract address */
   readerAddress?: string;
   privateKey?: string;
+  /** Linked external library addresses (informational, not required for SDK calls) */
+  operatorLibAddress?: string;
+  documentLibAddress?: string;
+  coSignLibAddress?: string;
+  recoveryLibAddress?: string;
 }
 
 export interface TenantInfo {
   id: string;
   admin: string;
+  operatorManager: string;
   treasury: string;
   isActive: boolean;
   createdAt: bigint;
@@ -67,7 +77,8 @@ export interface CoSignStatus {
   trustedCoSignRoleMask: bigint;
   requiredRoleMask: bigint;
   minSigners: number;
-  minStake: bigint;
+  /** Formatted ETH string, e.g. "1.5 ETH" */
+  minStake: string;
 }
 
 export interface RegisterPayload {
@@ -85,14 +96,15 @@ export interface RegisterPayload {
 export interface OperatorStatus {
   exists: boolean;
   isActive: boolean;
+  walletAddress: string;
   metadataURI: string;
-  stakeAmount: bigint;
+  /** Formatted ETH string, e.g. "1.5 ETH" */
+  stakeAmount: string;
   nonce: bigint;
   unstakeReadyAt: bigint;
   canUnstakeNow: boolean;
   recoveryDelegate: string;
 }
-
 export interface DocumentSnapshot {
   exists: boolean;
   isValid: boolean;
@@ -121,7 +133,7 @@ export interface TenantConfig {
   operatorManager: string;
   minStake: string;
   unstakeCooldown: bigint;
-
+}
 export interface UploadDraftResponse {
   status: "success" | "error" | string;
   document?: {
@@ -144,4 +156,18 @@ export interface PublishAndSignDocumentResult {
     chainId: bigint | number;
     verifyingContract: string;
   };
+}
+
+export interface DecodedLog {
+  name: string;
+  signature: string;
+  args: any;
+}
+export interface EnhancedTxResult {
+  transaction: TransactionResponse;
+  receipt: TransactionReceipt | null;
+  block: Block | null;
+  confirmations: number;
+  decodedInput?: any;
+  decodedLogs?: DecodedLog[];
 }
