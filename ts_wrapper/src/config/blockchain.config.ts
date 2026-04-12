@@ -2,7 +2,15 @@ import dotenv from "dotenv";
 import VoucherProtocolABI from "../abi/VoucherProtocolModule#VoucherProtocol.json";
 import VoucherProtocolReaderABI from "../abi/VoucherProtocolModule#VoucherProtocolReader.json";
 
-import { JsonRpcProvider, Wallet, Contract, parseEther } from "ethers";
+import {
+  JsonRpcProvider,
+  Wallet,
+  Contract,
+  parseEther,
+  formatEther,
+  id,
+} from "ethers";
+import type { Block } from "ethers";
 import type {
   BlockchainConfig,
   TenantInfo,
@@ -12,12 +20,15 @@ import type {
   DocumentSnapshot,
   VerifyStatus,
   TenantConfig,
+  DecodedLog,
+  EnhancedTxResult,
 } from "../types";
 import { generate_tenant_id } from "../../core_wasm/verzik_sdk";
+import { decodeContractError } from "../contract-errors";
 
 dotenv.config();
 
-type TenantTuple = [boolean, string, string, boolean, bigint];
+type TenantTuple = [boolean, string, string, string, boolean, bigint];
 const CHAIN_ID = process.env.CHAIN_ID?.trim() ?? 31337;
 export class BlockchainClient {
   private readonly provider: JsonRpcProvider;
@@ -73,20 +84,128 @@ export class BlockchainClient {
     return this.readerContract;
   }
 
+  private async _err(error: any): Promise<string> {
+    const iface = this.protocolContract?.interface;
+
+    let rescuedData: string | undefined;
+    if (error?.transaction) {
+      try {
+        await this.provider.call(error.transaction);
+      } catch (callErr: any) {
+        const raw =
+          callErr?.data ?? callErr?.error?.data ?? callErr?.info?.error?.data;
+        rescuedData = typeof raw === "string" ? raw : raw?.data;
+      }
+    }
+
+    const patchedError = rescuedData ? { ...error, data: rescuedData } : error;
+
+    return decodeContractError(patchedError, iface);
+  }
+
   // --- Base (only-view) ---
 
+  /** Trả về tổng số tenant đã tạo trên protocol.
+   * @returns Số lượng tenant (bigint)
+   */
   async getTenantCount(): Promise<bigint> {
     return (await this.readerContract.getTenantCount()) as bigint;
   }
 
+  /** Lấy toàn bộ thông tin một transaction theo hash: giao dịch, biên lai, khối, xác nhận, decode input/logs.
+   * @param txHash - Transaction hash
+   * @returns `{ transaction, receipt, block, confirmations, decodedInput, decodedLogs }`
+   */
+  async getTransactionByHash(txHash: string): Promise<EnhancedTxResult> {
+    try {
+      const [transaction, receipt] = await Promise.all([
+        this.provider.getTransaction(txHash),
+        this.provider.getTransactionReceipt(txHash),
+      ]);
+
+      if (!transaction) {
+        throw new Error(`Không tìm thấy giao dịch: ${txHash}`);
+      }
+
+      let block: Block | null = null;
+      let confirmations = 0;
+
+      if (receipt) {
+        const currentBlock = await this.provider.getBlockNumber();
+        block = await this.provider.getBlock(receipt.blockNumber);
+        confirmations = currentBlock - receipt.blockNumber + 1;
+      }
+
+      let decodedInput;
+      let decodedLogs: DecodedLog[] = [];
+
+      const contractInterface = this.protocolContract.interface;
+
+      if (contractInterface) {
+        try {
+          decodedInput = contractInterface.parseTransaction({
+            data: transaction.data,
+            value: transaction.value,
+          });
+        } catch (e) {
+          throw new Error(" " + e);
+        }
+
+        if (receipt?.logs) {
+          decodedLogs = receipt.logs
+            .map((log) => {
+              try {
+                const parsed = contractInterface.parseLog(log);
+                return parsed
+                  ? {
+                      name: parsed.name,
+                      signature: parsed.signature,
+                      args: parsed.args.toObject(),
+                    }
+                  : null;
+              } catch (e) {
+                return null;
+              }
+            })
+            .filter((log): log is DecodedLog => log !== null);
+        }
+      }
+
+      return {
+        transaction,
+        receipt,
+        block,
+        confirmations: Math.max(0, confirmations),
+        decodedInput,
+        decodedLogs,
+      };
+    } catch (error: any) {
+      throw new Error(await this._err(error));
+    }
+  }
+  /** Trả về tổng số operator đang thuộc tenant.
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @returns Số lượng operator (bigint)
+   */
   async getOperatorCount(tenantId: string): Promise<bigint> {
     return (await this.readerContract.getOperatorCount(tenantId)) as bigint;
   }
 
+  /** Lấy danh sách ID tenant theo trang.
+   * @param start - Vị trí bắt đầu (mặc định 0)
+   * @param limit - Số lượng tối đa (mặc định 10)
+   * @returns Mảng bytes32 hex ID
+   */
   async getTenantIds(start = 0, limit = 10): Promise<string[]> {
     return (await this.readerContract.getTenantIds(start, limit)) as string[];
   }
 
+  /** Lấy danh sách địa chỉ operator của tenant theo trang.
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @param start - Vị trí bắt đầu (mặc định 0)
+   * @param limit - Số lượng tối đa (mặc định 10)
+   * @returns Mảng địa chỉ operator
+   */
   async getOperatorIds(
     tenantId: string,
     start = 0,
@@ -99,9 +218,14 @@ export class BlockchainClient {
     )) as string[];
   }
 
+  /** Lấy thông tin chi tiết một tenant.
+   * @param id - ID tenant (bytes32 hex)
+   * @returns `{ id, admin, operatorManager, treasury, isActive, createdAt }` hoặc `null` nếu không tồn tại
+   */
   async getTenantInfo(id: string): Promise<TenantInfo | null> {
     const info = (await this.readerContract.getTenantInfo(id)) as TenantTuple;
-    const [exists, admin, treasury, isActive, createdAt] = info;
+    const [exists, admin, operatorManager, treasury, isActive, createdAt] =
+      info;
 
     if (!exists) {
       return null;
@@ -110,42 +234,76 @@ export class BlockchainClient {
     return {
       id,
       admin,
+      operatorManager,
       treasury,
       isActive,
       createdAt,
     };
   }
 
+  /** Lấy danh sách operator của tenant kèm trạng thái đầy đủ.
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @param start - Vị trí bắt đầu (mặc định 0)
+   * @param limit - Số lượng tối đa (mặc định 10)
+   * @returns Mảng `OperatorStatus` (chỉ những operator `exists = true`)
+   */
   async listOperators(
     tenantId: string,
     start = 0,
     limit = 10,
   ): Promise<OperatorStatus[]> {
     try {
-      const operatorAddresses = await this.readerContract.getOperatorIds(
+      const operatorAddresses = (await this.readerContract.getOperatorIds(
         tenantId,
         start,
         limit,
-      );
+      )) as string[];
 
       const operators = await Promise.all(
-        operatorAddresses.map((address: string) =>
-          this.readerContract.getOperatorStatus(tenantId, address),
-        ),
+        operatorAddresses.map(async (address: string) => {
+          const op = await this.readerContract.getOperatorStatus(
+            tenantId,
+            address,
+          );
+          return {
+            exists: op.exists,
+            isActive: op.isActive,
+            walletAddress:
+              op.walletAddress !== "0x0000000000000000000000000000000000000000"
+                ? op.walletAddress
+                : address,
+            metadataURI: op.metadataURI,
+            stakeAmount: formatEther(op.stakeAmount) + " ETH",
+            nonce: op.nonce,
+            unstakeReadyAt: op.unstakeReadyAt,
+            canUnstakeNow: op.canUnstakeNow,
+            recoveryDelegate: op.recoveryDelegate,
+          } as OperatorStatus;
+        }),
       );
 
       return operators.filter((op) => op.exists);
     } catch (error) {
-      throw new Error("Lỗi khi lấy danh sách Operator: " + error);
+      throw new Error(await this._err(error));
     }
   }
 
+  /** Lấy danh sách tenant kèm thông tin đầy đủ theo trang.
+   * @param start - Vị trí bắt đầu (mặc định 0)
+   * @param limit - Số lượng tối đa (mặc định 10)
+   * @returns Mảng `TenantInfo`
+   */
   async listTenants(start = 0, limit = 10): Promise<TenantInfo[]> {
     const ids = await this.getTenantIds(start, limit);
     const tenants = await Promise.all(ids.map((id) => this.getTenantInfo(id)));
     return tenants.filter((tenant): tenant is TenantInfo => tenant !== null);
   }
 
+  /** Lấy trạng thái đầy đủ của một operator trong tenant.
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @param operator - Địa chỉ ví operator
+   * @returns `{ exists, isActive, walletAddress, stakeAmount, nonce, unstakeReadyAt, canUnstakeNow, recoveryDelegate, metadataURI }`
+   */
   async getOperatorStatus(
     tenantId: string,
     operator: string,
@@ -159,18 +317,24 @@ export class BlockchainClient {
       return {
         exists: operatorStatus.exists,
         isActive: operatorStatus.isActive,
+        walletAddress: operatorStatus.walletAddress,
         metadataURI: operatorStatus.metadataURI,
-        stakeAmount: operatorStatus.stakeAmount,
+        stakeAmount: formatEther(operatorStatus.stakeAmount) + " ETH",
         nonce: operatorStatus.nonce,
         unstakeReadyAt: operatorStatus.unstakeReadyAt,
         canUnstakeNow: operatorStatus.canUnstakeNow,
         recoveryDelegate: operatorStatus.recoveryDelegate,
       };
     } catch (error) {
-      throw new Error("Could not fetch operator data " + error);
+      throw new Error(await this._err(error));
     }
   }
 
+  /** Lấy snapshot trạng thái tài liệu.
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @param fileHash - Hash file (bytes32 hex)
+   * @returns `{ exists, isValid, issuer, cid, timestamp, docType, version, coSignCount, trustedCoSignCount, coSignQualified, ... }`
+   */
   async getDocumentStatus(
     tenantId: string,
     fileHash: string,
@@ -196,10 +360,15 @@ export class BlockchainClient {
         coSignQualified: documentStatus.coSignQualified,
       };
     } catch (error) {
-      throw new Error(" " + error);
+      throw new Error(await this._err(error));
     }
   }
 
+  /** Xác thực tài liệu có hợp lệ không.
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @param fileHash - Hash file (bytes32 hex)
+   * @returns `VerifyStatus` (exists, isValid, issuer, cid)
+   */
   async verify(tenantId: string, fileHash: string): Promise<VerifyStatus> {
     try {
       return (await this.readerContract.verify(
@@ -207,10 +376,15 @@ export class BlockchainClient {
         fileHash,
       )) as VerifyStatus;
     } catch (error) {
-      throw new Error(" " + error);
+      throw new Error(await this._err(error));
     }
   }
 
+  /** Lấy tài liệu hoặc revert nếu không tồn tại.
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @param fileHash - Hash file (bytes32 hex)
+   * @returns Dữ liệu tài liệu thô từ contract
+   */
   async getDocumentOrRevert(
     tenantId: string,
     fileHash: string,
@@ -218,10 +392,16 @@ export class BlockchainClient {
     try {
       return await this.readerContract.getDocumentOrRevert(tenantId, fileHash);
     } catch (error) {
-      throw new Error(" " + error);
+      throw new Error(await this._err(error));
     }
   }
 
+  /** Kiểm tra một địa chỉ đã co-sign tài liệu chưa.
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @param fileHash - Hash file (bytes32 hex)
+   * @param signer - Địa chỉ cần kiểm tra
+   * @returns `true` nếu đã ký
+   */
   async hasSignedDocument(
     tenantId: string,
     fileHash: string,
@@ -232,10 +412,15 @@ export class BlockchainClient {
         await this.readerContract.hasSignedDocument(tenantId, fileHash, signer),
       );
     } catch (error) {
-      throw new Error(" " + error);
+      throw new Error(await this._err(error));
     }
   }
 
+  /** Kiểm tra tài liệu đã đạt ngưỡng co-sign chưa.
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @param fileHash - Hash file (bytes32 hex)
+   * @returns `true` nếu qualified
+   */
   async isDocumentCoSignQualified(
     tenantId: string,
     fileHash: string,
@@ -247,10 +432,15 @@ export class BlockchainClient {
       );
       return isQualified;
     } catch (error) {
-      throw new Error(" " + error);
+      throw new Error(await this._err(error));
     }
   }
 
+  /** Lấy tiến trình co-sign của tài liệu.
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @param fileHash - Hash file (bytes32 hex)
+   * @returns `{ coSignQualified, coSignCount, trustedCoSignCount, trustedCoSignRoleMask, requiredRoleMask, minSigners, minStake }`
+   */
   async getCoSignStatus(
     tenantId: string,
     fileHash: string,
@@ -267,15 +457,18 @@ export class BlockchainClient {
         trustedCoSignRoleMask: BigInt(result[3]),
         requiredRoleMask: BigInt(result[4]),
         minSigners: Number(result[5]),
-        minStake: BigInt(result[6]),
+        minStake: formatEther(result[6]) + " ETH",
       };
     } catch (error) {
-      throw new Error(
-        "Tài liệu không tồn tại hoặc chưa được khai báo " + error,
-      );
+      throw new Error(await this._err(error));
     }
   }
 
+  /** Lấy nonce hiện tại của operator (dùng để tạo signature EIP-712).
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @param operatorAddress - Địa chỉ operator
+   * @returns Nonce hiện tại (bigint)
+   */
   async getNonce(tenantId: string, operatorAddress: string): Promise<bigint> {
     try {
       const nonce = await this.protocolContract.nonces(
@@ -284,16 +477,22 @@ export class BlockchainClient {
       );
       return BigInt(nonce);
     } catch (error) {
-      throw new Error("" + error);
+      throw new Error(await this._err(error));
     }
   }
 
+  /** Lấy chính sách co-sign cho một loại tài liệu.
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @param docType - Loại tài liệu (số nguyên)
+   * @returns `{ enabled, minStake, minSigners, requiredRoleMask }`
+   */
   async getCoSignPolicy(
     tenantId: string,
     docType: number,
   ): Promise<{
     enabled: boolean;
-    minStake: bigint;
+    /** Formatted ETH string, e.g. "1.5 ETH" */
+    minStake: string;
     minSigners: bigint;
     requiredRoleMask: bigint;
   }> {
@@ -304,15 +503,21 @@ export class BlockchainClient {
       );
       return {
         enabled: Boolean(result[0]),
-        minStake: BigInt(result[1]),
+        minStake: formatEther(result[1]) + " ETH",
         minSigners: BigInt(result[2]),
         requiredRoleMask: BigInt(result[3]),
       };
     } catch (error) {
-      throw new Error(" " + error);
+      throw new Error(await this._err(error));
     }
   }
 
+  /** Lấy cấu hình co-sign của một operator cụ thể cho loại tài liệu.
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @param docType - Loại tài liệu (số nguyên)
+   * @param operator - Địa chỉ operator
+   * @returns `{ whitelisted, roleId }`
+   */
   async getCoSignOperatorConfig(
     tenantId: string,
     docType: number,
@@ -329,24 +534,33 @@ export class BlockchainClient {
         roleId: Number(result[1]),
       };
     } catch (error) {
-      throw new Error(" " + error);
+      throw new Error(await this._err(error));
     }
   }
 
+  /** Lấy cấu hình runtime hiện tại của tenant.
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @returns `{ minOperatorStake (ETH string), unstakeCooldown (giây, bigint) }`
+   */
   async getTenantRuntimeConfig(
     tenantId: string,
-  ): Promise<{ minOperatorStake: bigint; unstakeCooldown: bigint }> {
+  ): Promise<{ minOperatorStake: string; unstakeCooldown: bigint }> {
     try {
       const result = await this.readerContract.getTenantRuntimeConfig(tenantId);
       return {
-        minOperatorStake: BigInt(result[0]),
+        minOperatorStake: formatEther(result[0]) + " ETH",
         unstakeCooldown: BigInt(result[1]),
       };
     } catch (error) {
-      throw new Error(" " + error);
+      throw new Error(await this._err(error));
     }
   }
 
+  /** Lấy mức phạt (BPS) của một mã vi phạm.
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @param violationCode - Mã vi phạm (string, tự động hash `id()`)
+   * @returns Mức phạt theo BPS (1 BPS = 0.01%)
+   */
   async getViolationPenalty(
     tenantId: string,
     violationCode: string,
@@ -354,16 +568,22 @@ export class BlockchainClient {
     try {
       const penaltyBps = await this.readerContract.getViolationPenalty(
         tenantId,
-        violationCode,
+        id(violationCode),
       );
       return Number(penaltyBps);
     } catch (error) {
-      throw new Error(" " + error);
+      throw new Error(await this._err(error));
     }
   }
 
   // --- OWNER PROTOCOL ---
 
+  /** Tạo tenant mới. Yêu cầu quyền `PROTOCOL_ADMIN_ROLE`.
+   * @param tenantName - Tên tenant (chuỗi, tự động sinh tenantId bytes32)
+   * @param treasuryAddress - Địa chỉ nhận phí
+   * @param config - `{ admin, operatorManager, minStake (ETH string), unstakeCooldown (giây) }`
+   * @returns Transaction hash
+   */
   async createTenant(
     tenantName: string,
     treasuryAddress: string,
@@ -375,21 +595,30 @@ export class BlockchainClient {
       );
     }
 
-    const tx = await this.protocolContract.createTenant(
-      generate_tenant_id(tenantName),
-      treasuryAddress,
-      {
-        admin: config.admin,
-        slasher: config.slasher,
-        operatorManager: config.operatorManager,
-        minStake: parseEther(config.minStake),
-        unstakeCooldown: config.unstakeCooldown,
-      },
-    );
-    const receipt = await tx.wait();
-    return receipt.hash as string;
+    try {
+      const tx = await this.protocolContract.createTenant(
+        generate_tenant_id(tenantName),
+        treasuryAddress,
+        {
+          admin: config.admin,
+          slasher: config.slasher ?? config.operatorManager,
+          operatorManager: config.operatorManager,
+          minStake: parseEther(config.minStake),
+          unstakeCooldown: config.unstakeCooldown,
+        },
+      );
+      const receipt = await tx.wait();
+      return receipt.hash as string;
+    } catch (error) {
+      throw new Error(await this._err(error));
+    }
   }
 
+  /** Bật / tắt trạng thái hoạt động của tenant. Yêu cầu `PROTOCOL_ADMIN_ROLE`.
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @param isActive - `true` = bật, `false` = đóng băng
+   * @returns Transaction hash
+   */
   async setTenantStatus(tenantId: string, isActive: boolean): Promise<string> {
     try {
       const tx = await this.protocolContract.setTenantStatus(
@@ -399,12 +628,18 @@ export class BlockchainClient {
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(" " + error);
+      throw new Error(await this._err(error));
     }
   }
 
   // --- OPERATOR ---
 
+  /** Đăng ký trở thành operator của tenant (gửi kèm native token làm stake).
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @param metadataURI - URI metadata (HTTPS hoặc IPFS)
+   * @param stakeAmount - Số ETH stake (ví dụ: `"1.5"`)
+   * @returns Transaction hash
+   */
   async joinAsOperator(
     tenantId: string,
     metadataURI: string,
@@ -421,10 +656,15 @@ export class BlockchainClient {
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error("Lỗi gia nhập Operator: " + error);
+      throw new Error(await this._err(error));
     }
   }
 
+  /** Nạp thêm stake cho operator hiện tại trong tenant.
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @param stakeAmount - Số ETH cần nạp thêm (ví dụ: `"0.5"`)
+   * @returns Transaction hash
+   */
   async topUpStake(tenantId: string, stakeAmount: string): Promise<string> {
     try {
       const tx = await this.protocolContract.topUpStake(tenantId, {
@@ -433,10 +673,15 @@ export class BlockchainClient {
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(" " + error);
+      throw new Error(await this._err(error));
     }
   }
 
+  /** Cập nhật URI metadata của operator.
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @param metadataURI - URI mới
+   * @returns Transaction hash
+   */
   async updateOperatorMetadata(
     tenantId: string,
     metadataURI: string,
@@ -449,30 +694,42 @@ export class BlockchainClient {
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(" " + error);
+      throw new Error(await this._err(error));
     }
   }
 
+  /** Khởi động thời gian chờ unstake. Phải chờ đủ `unstakeCooldown` mới rút được.
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @returns Transaction hash
+   */
   async requestUnstake(tenantId: string): Promise<string> {
     try {
       const tx = await this.protocolContract.requestUnstake(tenantId);
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(" " + error);
+      throw new Error(await this._err(error));
     }
   }
 
+  /** Thực hiện rút stake sau khi cooldown đã hết. ETH trả về ví operator.
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @returns Transaction hash
+   */
   async executeUnstake(tenantId: string): Promise<string> {
     try {
       const tx = await this.protocolContract.executeUnstake(tenantId);
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(" " + error);
+      throw new Error(await this._err(error));
     }
   }
 
+  /** Đăng ký tài liệu bằng chữ ký EIP-712 của operator.
+   * @param payload - `{ tenantId, fileHash, cid, ciphertextHash, encryptionMetaHash, docType, version, nonce, deadline }`
+   * @returns Transaction hash
+   */
   async registerWithSignature(payload: RegisterPayload): Promise<string> {
     try {
       if (!this.wallet) throw new Error("Cần Private Key để ký!");
@@ -507,10 +764,14 @@ export class BlockchainClient {
 
       return receipt.hash as string;
     } catch (error) {
-      throw new Error("" + error);
+      throw new Error(await this._err(error));
     }
   }
 
+  /** Đồng ký tài liệu bằng chữ ký EIP-712.
+   * @param payload - `{ tenantId, fileHash, nonce, deadline }`
+   * @returns Transaction hash
+   */
   async coSignDocumentWithSignature(payload: {
     tenantId: string;
     fileHash: string;
@@ -544,10 +805,15 @@ export class BlockchainClient {
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(" " + error);
+      throw new Error(await this._err(error));
     }
   }
 
+  /** Ủy quyền một địa chỉ khác thực hiện recovery cho tài khoản operator.
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @param delegate - Địa chỉ được ủy quyền
+   * @returns Transaction hash
+   */
   async setRecoveryDelegate(
     tenantId: string,
     delegate: string,
@@ -560,10 +826,16 @@ export class BlockchainClient {
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(" " + error);
+      throw new Error(await this._err(error));
     }
   }
 
+  /** Phục hồi operator thông qua delegate đã được ủy quyền (cần gọi từ ví delegate).
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @param lostOperator - Địa chỉ ví cũ cần phục hồi
+   * @param reason - Lý do (string)
+   * @returns Transaction hash
+   */
   async recoverOperatorByDelegate(
     tenantId: string,
     lostOperator: string,
@@ -578,22 +850,33 @@ export class BlockchainClient {
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(" " + error);
+      throw new Error(await this._err(error));
     }
   }
 
   // --- TENANT ADMIN ---
 
+  /** Cập nhật địa chỉ treasury của tenant. Yêu cầu quyền Admin.
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @param newTreasury - Địa chỉ treasury mới (không được trùng role khác)
+   * @returns Transaction hash
+   */
   async setTreasury(tenantId: string, newTreasury: string): Promise<string> {
     try {
       const tx = await this.protocolContract.setTreasury(tenantId, newTreasury);
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(" " + error);
+      throw new Error(await this._err(error));
     }
   }
 
+  /** Thu hồi tài liệu (đánh dấu vô hiệu). Yêu cầu quyền Tenant Admin.
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @param fileHash - Hash file (bytes32 hex)
+   * @param reason - Lý do thu hồi
+   * @returns Transaction hash
+   */
   async revokeDocument(
     tenantId: string,
     fileHash: string,
@@ -608,12 +891,18 @@ export class BlockchainClient {
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(" " + error);
+      throw new Error(await this._err(error));
     }
   }
 
-  // --- TENANT SLAHER ---
+  // --- TENANT OPERATOR MANAGER (slash) ---
 
+  /** Phạt nặng operator: mất toàn bộ stake, vô hiệu hóa. Yêu cầu quyền Operator Manager.
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @param operator - Địa chỉ operator bị phạt
+   * @param reason - Lý do (string)
+   * @returns Transaction hash
+   */
   async slashOperator(
     tenantId: string,
     operator: string,
@@ -628,10 +917,17 @@ export class BlockchainClient {
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(" " + error);
+      throw new Error(await this._err(error));
     }
   }
 
+  /** Phạt nhẹ operator dựa theo mã vi phạm và tỷ lệ BPS đã cấu hình. Yêu cầu quyền Operator Manager.
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @param operator - Địa chỉ operator bị phạt
+   * @param violationCode - Mã vi phạm (string)
+   * @param reason - Lý do (string)
+   * @returns Transaction hash
+   */
   async softSlashOperator(
     tenantId: string,
     operator: string,
@@ -648,12 +944,19 @@ export class BlockchainClient {
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(" " + error);
+      throw new Error(await this._err(error));
     }
   }
 
   // --- Tenant operator manager ---
 
+  /** Bật / tắt trạng thái hoạt động của operator. Yêu cầu quyền Operator Manager.
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @param operator - Địa chỉ operator
+   * @param isActive - `true` = bật, `false` = khóa
+   * @param reason - Lý do (string)
+   * @returns Transaction hash
+   */
   async setOperatorStatus(
     tenantId: string,
     operator: string,
@@ -670,10 +973,17 @@ export class BlockchainClient {
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(" " + error);
+      throw new Error(await this._err(error));
     }
   }
 
+  /** Phục hồi operator bằng cách chuyển sang ví mới (Admin thực hiện thay).
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @param lostOperator - Địa chỉ ví cũ
+   * @param newOperator - Địa chỉ ví mới
+   * @param reason - Lý do (string)
+   * @returns Transaction hash
+   */
   async recoverOperatorByAdmin(
     tenantId: string,
     lostOperator: string,
@@ -690,15 +1000,24 @@ export class BlockchainClient {
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(" " + error);
+      throw new Error(await this._err(error));
     }
   }
 
+  /** Thiết lập chính sách co-sign cho loại tài liệu. Yêu cầu quyền Operator Manager.
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @param docType - Loại tài liệu (số nguyên)
+   * @param enabled - Bật/tắt policy
+   * @param minStake - Stake tối thiểu (ETH string, ví dụ: `"1.0"`)
+   * @param minSigners - Số co-signer tối thiểu (bigint)
+   * @param requiredRoleMask - Role mask yêu cầu (bigint)
+   * @returns Transaction hash
+   */
   async setCoSignPolicy(
     tenantId: string,
     docType: number,
     enabled: boolean,
-    minStake: bigint,
+    minStake: string,
     minSigners: bigint,
     requiredRoleMask: bigint,
   ): Promise<string> {
@@ -707,17 +1026,25 @@ export class BlockchainClient {
         tenantId,
         docType,
         enabled,
-        minStake,
+        parseEther(minStake),
         minSigners,
         requiredRoleMask,
       );
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(" " + error);
+      throw new Error(await this._err(error));
     }
   }
 
+  /** Cấp/thu hồi quyền co-sign và role cho operator trên một loại tài liệu.
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @param docType - Loại tài liệu (số nguyên)
+   * @param operator - Địa chỉ operator
+   * @param whitelisted - `true` = cấp quyền, `false` = thu hồi
+   * @param roleId - Role ID (số nguyên)
+   * @returns Transaction hash
+   */
   async setCoSignOperator(
     tenantId: string,
     docType: number,
@@ -736,26 +1063,36 @@ export class BlockchainClient {
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(" " + error);
+      throw new Error(await this._err(error));
     }
   }
 
+  /** Cập nhật mức stake tối thiểu cho operator của tenant. Yêu cầu quyền Operator Manager.
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @param newMinOperatorStake - Mức stake mới (ETH string, ví dụ: `"2.0"`)
+   * @returns Transaction hash
+   */
   async setMinOperatorStake(
     tenantId: string,
-    newMinOperatorStake: bigint,
+    newMinOperatorStake: string,
   ): Promise<string> {
     try {
       const tx = await this.protocolContract.setMinOperatorStake(
         tenantId,
-        newMinOperatorStake,
+        parseEther(newMinOperatorStake),
       );
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(" " + error);
+      throw new Error(await this._err(error));
     }
   }
 
+  /** Cập nhật thời gian chờ unstake. Yêu cầu quyền Operator Manager.
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @param newUnstakeCooldown - Thời gian chờ tính bằng giây (bigint, ví dụ: `86400n` = 1 ngày)
+   * @returns Transaction hash
+   */
   async setUnstakeCooldown(
     tenantId: string,
     newUnstakeCooldown: bigint,
@@ -768,10 +1105,16 @@ export class BlockchainClient {
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(" " + error);
+      throw new Error(await this._err(error));
     }
   }
 
+  /** Cấu hình mức phạt (BPS) cho mã vi phạm. Yêu cầu quyền Operator Manager.
+   * @param tenantId - ID tenant (bytes32 hex)
+   * @param violationCode - Mã vi phạm (string, tự động hash `id()`)
+   * @param penaltyBps - Mức phạt (1 BPS = 0.01%, tối đa 10000 = 100%)
+   * @returns Transaction hash
+   */
   async setViolationPenalty(
     tenantId: string,
     violationCode: string,
@@ -780,13 +1123,13 @@ export class BlockchainClient {
     try {
       const tx = await this.protocolContract.setViolationPenalty(
         tenantId,
-        violationCode,
+        id(violationCode),
         penaltyBps,
       );
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(" " + error);
+      throw new Error(await this._err(error));
     }
   }
 }
@@ -803,6 +1146,12 @@ export function createBlockchainClientFromEnv(): BlockchainClient {
   const protocolAddress = process.env.PROTOCOL_ADDRESS?.trim();
   const readerAddress = process.env.READER_ADDRESS?.trim();
 
+  // External library addresses (linked at deploy, not called directly by SDK)
+  const operatorLibAddress = process.env.OPERATOR_LIB_ADDRESS?.trim();
+  const documentLibAddress = process.env.DOCUMENT_LIB_ADDRESS?.trim();
+  const coSignLibAddress = process.env.COSIGN_LIB_ADDRESS?.trim();
+  const recoveryLibAddress = process.env.RECOVERY_LIB_ADDRESS?.trim();
+
   if (!rpcUrl || !protocolAddress) {
     throw new Error(
       "Bổ sung biến môi trường vào .env (RPC_URL hoặc PROTOCOL_ADDRESS)",
@@ -814,6 +1163,10 @@ export function createBlockchainClientFromEnv(): BlockchainClient {
     privateKey,
     protocolAddress,
     readerAddress,
+    operatorLibAddress,
+    documentLibAddress,
+    coSignLibAddress,
+    recoveryLibAddress,
   });
 }
 
