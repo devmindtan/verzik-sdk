@@ -28,6 +28,9 @@ export interface VerzikError {
 
 export interface EncryptOptions {
   aesKey?: Uint8Array;
+  /**
+   * WARNING: Setting a custom nonce manually is highly discouraged and can lead to severe security vulnerabilities if reused.
+   */
   nonce?: Uint8Array;
 }
 
@@ -111,8 +114,8 @@ export interface DocumentSnapshot {
   issuer: string;
   cid: string;
   timestamp: bigint;
-  ciphertextHash: number;
-  encryptionMetaHash: number;
+  ciphertextHash: string;
+  encryptionMetaHash: string;
   docType: number;
   version: number;
   coSignCount: bigint;
@@ -134,6 +137,10 @@ export interface TenantConfig {
   minStake: string;
   unstakeCooldown: bigint;
 }
+<<<<<<< HEAD
+=======
+
+>>>>>>> 54e430a (fix: correct snapshot types, dynamic chainId, and error handling)
 export interface UploadDraftResponse {
   status: "success" | "error" | string;
   document?: {

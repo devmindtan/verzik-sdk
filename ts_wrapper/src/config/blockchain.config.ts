@@ -27,9 +27,21 @@ import { generate_tenant_id } from "../../core_wasm/verzik_sdk";
 import { decodeContractError } from "../contract-errors";
 
 dotenv.config();
+interface DecodedLog {
+  name: string;
+  signature: string;
+  args: any;
+}
+interface EnhancedTxResult {
+  transaction: TransactionResponse;
+  receipt: TransactionReceipt | null;
+  block: Block | null;
+  confirmations: number;
+  decodedInput?: any; // Giải mã hàm đã gọi
+  decodedLogs?: DecodedLog[]; // Giải mã các Event (Emit)
+}
+type TenantTuple = [boolean, string, string, boolean, bigint];
 
-type TenantTuple = [boolean, string, string, string, boolean, bigint];
-const CHAIN_ID = process.env.CHAIN_ID?.trim() ?? 31337;
 export class BlockchainClient {
   private readonly provider: JsonRpcProvider;
   private readonly wallet?: Wallet;
@@ -112,12 +124,9 @@ export class BlockchainClient {
     return (await this.readerContract.getTenantCount()) as bigint;
   }
 
-  /** Lấy toàn bộ thông tin một transaction theo hash: giao dịch, biên lai, khối, xác nhận, decode input/logs.
-   * @param txHash - Transaction hash
-   * @returns `{ transaction, receipt, block, confirmations, decodedInput, decodedLogs }`
-   */
   async getTransactionByHash(txHash: string): Promise<EnhancedTxResult> {
     try {
+      // 1. Lấy dữ liệu thô đồng thời để tối ưu hiệu năng (Parallel)
       const [transaction, receipt] = await Promise.all([
         this.provider.getTransaction(txHash),
         this.provider.getTransactionReceipt(txHash),
@@ -127,6 +136,7 @@ export class BlockchainClient {
         throw new Error(`Không tìm thấy giao dịch: ${txHash}`);
       }
 
+      // 2. Lấy Block và tính Confirmations
       let block: Block | null = null;
       let confirmations = 0;
 
@@ -136,21 +146,25 @@ export class BlockchainClient {
         confirmations = currentBlock - receipt.blockNumber + 1;
       }
 
+      // 3. GIẢI MÃ DỮ LIỆU (Phần quan trọng nhất)
       let decodedInput;
       let decodedLogs: DecodedLog[] = [];
 
+      // Lấy interface từ contract của bạn (this.protocolContract.interface)
       const contractInterface = this.protocolContract.interface;
 
       if (contractInterface) {
+        // Giải mã Input (Biết được hàm nào đã gọi và tham số truyền vào)
         try {
           decodedInput = contractInterface.parseTransaction({
             data: transaction.data,
             value: transaction.value,
           });
         } catch (e) {
-          throw new Error(" " + e);
+          /* Giao dịch không thuộc contract này */
         }
 
+        // Giải mã Logs (Biết được các Event/Emit đã bắn ra)
         if (receipt?.logs) {
           decodedLogs = receipt.logs
             .map((log) => {
@@ -158,10 +172,10 @@ export class BlockchainClient {
                 const parsed = contractInterface.parseLog(log);
                 return parsed
                   ? {
-                      name: parsed.name,
-                      signature: parsed.signature,
-                      args: parsed.args.toObject(),
-                    }
+                    name: parsed.name,
+                    signature: parsed.signature,
+                    args: parsed.args.toObject(),
+                  }
                   : null;
               } catch (e) {
                 return null;
@@ -180,13 +194,9 @@ export class BlockchainClient {
         decodedLogs,
       };
     } catch (error: any) {
-      throw new Error(await this._err(error));
+      throw new Error(`Lỗi Explorer: ${error.message}`);
     }
   }
-  /** Trả về tổng số operator đang thuộc tenant.
-   * @param tenantId - ID tenant (bytes32 hex)
-   * @returns Số lượng operator (bigint)
-   */
   async getOperatorCount(tenantId: string): Promise<bigint> {
     return (await this.readerContract.getOperatorCount(tenantId)) as bigint;
   }
@@ -284,7 +294,7 @@ export class BlockchainClient {
 
       return operators.filter((op) => op.exists);
     } catch (error) {
-      throw new Error(await this._err(error));
+      throw new Error("Could not list operators: " + error);
     }
   }
 
@@ -326,7 +336,7 @@ export class BlockchainClient {
         recoveryDelegate: operatorStatus.recoveryDelegate,
       };
     } catch (error) {
-      throw new Error(await this._err(error));
+      throw new Error("Could not fetch operator status: " + error);
     }
   }
 
@@ -360,7 +370,7 @@ export class BlockchainClient {
         coSignQualified: documentStatus.coSignQualified,
       };
     } catch (error) {
-      throw new Error(await this._err(error));
+      throw new Error(String(error));
     }
   }
 
@@ -413,6 +423,7 @@ export class BlockchainClient {
       );
     } catch (error) {
       throw new Error(await this._err(error));
+
     }
   }
 
@@ -477,7 +488,7 @@ export class BlockchainClient {
       );
       return BigInt(nonce);
     } catch (error) {
-      throw new Error(await this._err(error));
+      throw new Error(String(error));
     }
   }
 
@@ -508,7 +519,7 @@ export class BlockchainClient {
         requiredRoleMask: BigInt(result[3]),
       };
     } catch (error) {
-      throw new Error(await this._err(error));
+      throw new Error(String(error));
     }
   }
 
@@ -534,7 +545,7 @@ export class BlockchainClient {
         roleId: Number(result[1]),
       };
     } catch (error) {
-      throw new Error(await this._err(error));
+      throw new Error(String(error));
     }
   }
 
@@ -552,7 +563,7 @@ export class BlockchainClient {
         unstakeCooldown: BigInt(result[1]),
       };
     } catch (error) {
-      throw new Error(await this._err(error));
+      throw new Error(String(error));
     }
   }
 
@@ -569,10 +580,11 @@ export class BlockchainClient {
       const penaltyBps = await this.readerContract.getViolationPenalty(
         tenantId,
         id(violationCode),
+        id(violationCode),
       );
       return Number(penaltyBps);
     } catch (error) {
-      throw new Error(await this._err(error));
+      throw new Error(String(error));
     }
   }
 
@@ -628,7 +640,7 @@ export class BlockchainClient {
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(await this._err(error));
+      throw new Error(String(error));
     }
   }
 
@@ -673,7 +685,7 @@ export class BlockchainClient {
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(await this._err(error));
+      throw new Error(String(error));
     }
   }
 
@@ -694,7 +706,7 @@ export class BlockchainClient {
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(await this._err(error));
+      throw new Error(String(error));
     }
   }
 
@@ -708,7 +720,7 @@ export class BlockchainClient {
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(await this._err(error));
+      throw new Error(String(error));
     }
   }
 
@@ -722,7 +734,7 @@ export class BlockchainClient {
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(await this._err(error));
+      throw new Error(String(error));
     }
   }
 
@@ -734,10 +746,11 @@ export class BlockchainClient {
     try {
       if (!this.wallet) throw new Error("Cần Private Key để ký!");
 
+      const network = await this.provider.getNetwork();
       const domain = {
         name: "VoucherProtocol",
         version: "1",
-        chainId: CHAIN_ID,
+        chainId: network.chainId,
         verifyingContract: this.protocolContract.target as string,
       };
 
@@ -764,7 +777,7 @@ export class BlockchainClient {
 
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(await this._err(error));
+      throw new Error(String(error));
     }
   }
 
@@ -781,10 +794,11 @@ export class BlockchainClient {
     try {
       if (!this.wallet) throw new Error("Cần Private Key để ký!");
 
+      const network = await this.provider.getNetwork();
       const domain = {
         name: "VoucherProtocol",
         version: "1",
-        chainId: CHAIN_ID,
+        chainId: network.chainId,
         verifyingContract: this.protocolContract.target as string,
       };
 
@@ -805,7 +819,7 @@ export class BlockchainClient {
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(await this._err(error));
+      throw new Error(String(error));
     }
   }
 
@@ -826,7 +840,7 @@ export class BlockchainClient {
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(await this._err(error));
+      throw new Error(String(error));
     }
   }
 
@@ -850,7 +864,7 @@ export class BlockchainClient {
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(await this._err(error));
+      throw new Error(String(error));
     }
   }
 
@@ -867,7 +881,7 @@ export class BlockchainClient {
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(await this._err(error));
+      throw new Error(String(error));
     }
   }
 
@@ -891,7 +905,7 @@ export class BlockchainClient {
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(await this._err(error));
+      throw new Error(String(error));
     }
   }
 
@@ -917,7 +931,7 @@ export class BlockchainClient {
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(await this._err(error));
+      throw new Error(String(error));
     }
   }
 
@@ -944,7 +958,7 @@ export class BlockchainClient {
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(await this._err(error));
+      throw new Error(String(error));
     }
   }
 
@@ -973,7 +987,7 @@ export class BlockchainClient {
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(await this._err(error));
+      throw new Error(String(error));
     }
   }
 
@@ -1000,7 +1014,7 @@ export class BlockchainClient {
       const receipt = await tx.wait();
       return receipt.hash as string;
     } catch (error) {
-      throw new Error(await this._err(error));
+      throw new Error(String(error));
     }
   }
 
@@ -1018,6 +1032,7 @@ export class BlockchainClient {
     docType: number,
     enabled: boolean,
     minStake: string,
+    minStake: string,
     minSigners: bigint,
     requiredRoleMask: bigint,
   ): Promise<string> {
@@ -1026,6 +1041,7 @@ export class BlockchainClient {
         tenantId,
         docType,
         enabled,
+        parseEther(minStake),
         parseEther(minStake),
         minSigners,
         requiredRoleMask,

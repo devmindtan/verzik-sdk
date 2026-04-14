@@ -22,6 +22,17 @@ let signer = null;
 let signerAddress = "";
 let eip1193Provider = null;
 
+const DEFAULTS = {
+  uploadUrl: "http://localhost:3000/api/v1/upload",
+  verifyingContract: "0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6",
+  tenantId: "0xe702fef210dc66faad0553ea8e2f5064188068f8052d2cd9c9611417db5c2705",
+  clientId: "",
+  clientDomain: "localhost",
+  docType: 1,
+  version: 1,
+  chainId: 31337
+};
+
 function nowPlus(hours) {
   return Math.floor(Date.now() / 1000) + hours * 3600;
 }

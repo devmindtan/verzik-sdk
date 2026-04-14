@@ -15,6 +15,17 @@ export function reWrapKey(
   oldPrivateKey: Uint8Array,
   newRecipientPubKey: Uint8Array,
 ): ReWrapResult {
+  if (!(oldPrivateKey instanceof Uint8Array) || oldPrivateKey.length !== 32) {
+    throw new Error("Invalid private key format. Expected 32-byte SECP256k1 private key.");
+  }
+  if (
+    !(newRecipientPubKey instanceof Uint8Array) ||
+    !((newRecipientPubKey.length === 65 && newRecipientPubKey[0] === 0x04) ||
+      (newRecipientPubKey.length === 33 && (newRecipientPubKey[0] === 0x02 || newRecipientPubKey[0] === 0x03)))
+  ) {
+    throw new Error("Invalid Web3 public key format. Expected uncompressed (65 bytes, 0x04) or compressed (33 bytes, 0x02/0x03) SECP256k1 public key.");
+  }
+
   const result = core.re_wrap_key(encryptedKey, nonce, oldPrivateKey, newRecipientPubKey);
 
   return {

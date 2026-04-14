@@ -47,7 +47,7 @@ function normalizeUploadPayload(file: Blob | Uint8Array | ArrayBuffer, fileName 
     }
 
     if (typeof Blob === "undefined") {
-        throw new Error("Runtime này không hỗ trợ Blob/FormData để upload multipart/form-data.");
+        throw new Error("This runtime does not support Blob/FormData for multipart/form-data upload.");
     }
 
     const blob = new Blob([file], { type: "application/octet-stream" });
@@ -209,9 +209,42 @@ export async function publishAndSignDocument(
         };
     } catch (error) {
         if (isUserRejectedSignatureError(error)) {
-            throw new Error("Người dùng đã từ chối ký EIP-712 trong MetaMask.");
+            throw new Error("User rejected the signature request in MetaMask.");
         }
 
         throw error instanceof Error ? error : new Error(String(error));
     }
+}
+
+/**
+ * Recovers the signer address from a given EIP-712 signature matching the VoucherProtocol.
+ */
+export function verifySignature(
+    payload: RegisterPayload,
+    signature: string,
+    verifyingContract: string,
+    chainId: bigint | number
+): string {
+    const domain = {
+        name: "VoucherProtocol",
+        version: "1",
+        chainId,
+        verifyingContract
+    };
+
+    const types = {
+        Register: [
+            { name: "tenantId", type: "bytes32" },
+            { name: "fileHash", type: "bytes32" },
+            { name: "cid", type: "string" },
+            { name: "ciphertextHash", type: "bytes32" },
+            { name: "encryptionMetaHash", type: "bytes32" },
+            { name: "docType", type: "uint32" },
+            { name: "version", type: "uint32" },
+            { name: "nonce", type: "uint256" },
+            { name: "deadline", type: "uint256" }
+        ]
+    };
+
+    return ethers.verifyTypedData(domain, types, payload, signature);
 }

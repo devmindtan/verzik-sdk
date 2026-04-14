@@ -12,7 +12,7 @@ import type {
  *
  * @param fileData Raw file bytes
  * @param recipientPubKey Secp256k1 uncompressed public key (65 bytes, 04-prefix)
- * @param options Optional overrides for AES key and nonce
+ * @param options Optional overrides for AES key and nonce. WARNING: Do not override nonce unless you know what you are doing.
  */
 export function encrypt(
   fileData: Uint8Array,

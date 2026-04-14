@@ -2,6 +2,11 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+try {
+  require('dotenv').config({ path: path.join(__dirname, '../../.env'), override: true });
+} catch (e) {
+  console.warn("Could not load dotenv:", e.message);
+}
 const {
   VerzikSDK,
   bytesToHex,
