@@ -4,6 +4,7 @@ pub mod encrypt;
 pub mod keccak_hash;
 pub mod re_wrap;
 pub mod generate_tenant_id;
+pub mod stream;
 
 #[wasm_bindgen]
 extern "C" {
