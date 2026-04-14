@@ -1,13 +1,15 @@
 import { describe, it, expect } from "vitest";
 import { encrypt } from "../src/encrypt";
-import crypto from "crypto";
+import { Wallet } from "ethers";
+import { hexToBytes } from "../src/utils";
 
 describe("VerzikSDK Encryption", () => {
     it("should encrypt successfully with a valid uncompressed public key", () => {
-        // Generate a random uncompressed public key (65 bytes with 0x04 prefix)
-        const recipientPubKey = new Uint8Array(65);
-        recipientPubKey[0] = 0x04;
-        crypto.randomFillSync(recipientPubKey, 1);
+        // Generate a real uncompressed public key (65 bytes with 0x04 prefix) using ethers
+        const wallet = Wallet.createRandom();
+        // ethers V6 public keys start with 0x04 for uncompressed keys
+        const pubKeyHex = wallet.signingKey.publicKey;
+        const recipientPubKey = hexToBytes(pubKeyHex);
 
         const data = new Uint8Array([1, 2, 3, 4, 5]);
 
