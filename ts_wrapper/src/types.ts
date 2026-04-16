@@ -137,10 +137,7 @@ export interface TenantConfig {
   minStake: string;
   unstakeCooldown: bigint;
 }
-<<<<<<< HEAD
-=======
 
->>>>>>> 54e430a (fix: correct snapshot types, dynamic chainId, and error handling)
 export interface UploadDraftResponse {
   status: "success" | "error" | string;
   document?: {

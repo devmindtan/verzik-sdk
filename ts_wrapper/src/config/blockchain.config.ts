@@ -27,20 +27,8 @@ import { generate_tenant_id } from "../../core_wasm/verzik_sdk";
 import { decodeContractError } from "../contract-errors";
 
 dotenv.config();
-interface DecodedLog {
-  name: string;
-  signature: string;
-  args: any;
-}
-interface EnhancedTxResult {
-  transaction: TransactionResponse;
-  receipt: TransactionReceipt | null;
-  block: Block | null;
-  confirmations: number;
-  decodedInput?: any; // Giải mã hàm đã gọi
-  decodedLogs?: DecodedLog[]; // Giải mã các Event (Emit)
-}
-type TenantTuple = [boolean, string, string, boolean, bigint];
+
+type TenantTuple = [boolean, string, string, string, boolean, bigint];
 
 export class BlockchainClient {
   private readonly provider: JsonRpcProvider;
@@ -1032,7 +1020,6 @@ export class BlockchainClient {
     docType: number,
     enabled: boolean,
     minStake: string,
-    minStake: string,
     minSigners: bigint,
     requiredRoleMask: bigint,
   ): Promise<string> {
@@ -1041,7 +1028,6 @@ export class BlockchainClient {
         tenantId,
         docType,
         enabled,
-        parseEther(minStake),
         parseEther(minStake),
         minSigners,
         requiredRoleMask,
