@@ -1,6 +1,7 @@
 import type { TorusNetworkOptions } from "./types";
 import { encrypt, decrypt, split, merge, hashDocument } from "./encrypt";
 import { reWrapKey } from "./re_wrap";
+import * as core from "../core_wasm/verzik_sdk";
 import { getPublicKeyFromEmail } from "./identity";
 export type {
   EncryptOptions,
@@ -83,7 +84,6 @@ export class VerzikSDK {
   static reWrapKey = reWrapKey;
 
   static ping(): void {
-    const core = require("../core_wasm/verzik_sdk");
     core.ping();
   }
 

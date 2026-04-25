@@ -28,6 +28,9 @@ export interface VerzikError {
 
 export interface EncryptOptions {
   aesKey?: Uint8Array;
+  /**
+   * WARNING: Setting a custom nonce manually is highly discouraged and can lead to severe security vulnerabilities if reused.
+   */
   nonce?: Uint8Array;
 }
 
@@ -92,12 +95,58 @@ export interface OperatorStatus {
   canUnstakeNow: boolean;
   recoveryDelegate: string;
 }
+export interface DocumentSnapshot {
+  exists: boolean;
+  isValid: boolean;
+  issuer: string;
+  cid: string;
+  timestamp: bigint;
+  ciphertextHash: string;
+  encryptionMetaHash: string;
+  docType: number;
+  version: number;
+  coSignCount: bigint;
+  trustedCoSignCount: bigint;
+  trustedCoSignRoleMask: bigint;
+  coSignQualified: boolean;
+}
 
 export interface VerifyStatus {
   exists: boolean;
   isValid: boolean;
   issuer: string;
   cid: string;
+}
+export interface TenantConfig {
+  admin: string;
+  slasher: string;
+  operatorManager: string;
+  minStake: string;
+  unstakeCooldown: bigint;
+}
+
+export interface UploadDraftResponse {
+  status: "success" | "error" | string;
+  document?: {
+    original_hash: string;
+    metadata_cid: string;
+    [key: string]: any;
+  };
+  [key: string]: any;
+}
+
+export interface PublishAndSignDocumentResult {
+  upload: UploadDraftResponse;
+  payload: RegisterPayload;
+  signature: string;
+  signerAddress: string;
+  chainId: bigint | number;
+  domain: {
+    name: string;
+    version: string;
+    chainId: bigint | number;
+    verifyingContract: string;
+  };
 }
 
 export interface DecodedLog {
