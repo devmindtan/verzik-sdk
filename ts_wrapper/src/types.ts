@@ -50,20 +50,6 @@ export interface ReWrapResult {
   encryption_meta_hash: string;
 }
 
-export interface BlockchainConfig {
-  rpcUrl: string;
-  /** VoucherProtocol main contract address */
-  protocolAddress: string;
-  /** VoucherProtocolReader contract address */
-  readerAddress?: string;
-  privateKey?: string;
-  /** Linked external library addresses (informational, not required for SDK calls) */
-  operatorLibAddress?: string;
-  documentLibAddress?: string;
-  coSignLibAddress?: string;
-  recoveryLibAddress?: string;
-}
-
 export interface TenantInfo {
   id: string;
   admin: string;
@@ -87,6 +73,7 @@ export interface CoSignStatus {
 export interface RegisterPayload {
   tenantId: string;
   fileHash: string;
+  owner: string;
   cid: string;
   ciphertextHash: string;
   encryptionMetaHash: string;
@@ -102,9 +89,9 @@ export interface OperatorStatus {
   walletAddress: string;
   metadataURI: string;
   /** Formatted ETH string, e.g. "1.5 ETH" */
-  stakeAmount: string;
-  nonce: bigint;
-  unstakeReadyAt: bigint;
+  stakeAmount: number;
+  nonce: number;
+  unstakeReadyAt: number;
   canUnstakeNow: boolean;
   recoveryDelegate: string;
 }
@@ -172,6 +159,6 @@ export interface EnhancedTxResult {
   receipt: TransactionReceipt | null;
   block: Block | null;
   confirmations: number;
-  decodedInput?: any;
-  decodedLogs?: DecodedLog[];
+  decodedInput?: any; // Giải mã hàm đã gọi
+  decodedLogs?: DecodedLog[]; // Giải mã các Event (Emit)
 }
