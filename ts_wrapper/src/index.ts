@@ -1,29 +1,8 @@
-import type {
-  BlockchainConfig,
-  EncryptOptions,
-  ReWrapResult,
-  TenantInfo,
-  VerzikEnvelope,
-  VerzikError,
-  VerzikMetadata,
-  VerzikPackage,
-  TorusNetworkOptions,
-} from "./types";
-import { bytesToHex, hexToBytes, parseError } from "./utils";
-import { decodeContractError } from "./contract-errors";
+import type { TorusNetworkOptions } from "./types";
 import { encrypt, decrypt, split, merge, hashDocument } from "./encrypt";
 import { reWrapKey } from "./re_wrap";
 import { getPublicKeyFromEmail } from "./identity";
-import {
-  BlockchainClient,
-  createBlockchainClient,
-  createBlockchainClientFromEnv,
-  createRegisterPayload,
-  init,
-} from "./config/blockchain.config";
-
 export type {
-  BlockchainConfig,
   EncryptOptions,
   ReWrapResult,
   TenantInfo,
@@ -32,15 +11,68 @@ export type {
   VerzikMetadata,
   VerzikPackage,
   TorusNetworkOptions,
-};
-export { bytesToHex, hexToBytes, parseError, decodeContractError };
+  EnhancedTxResult,
+  OperatorStatus,
+  VerifyStatus,
+} from "./types";
+export type {
+  BlockchainConfig,
+  TenantConfig,
+  TenantRuntimeConfig,
+  DocumentSnapshot,
+} from "./types/blockchain.types";
+export type {
+  GraphNodeConfig,
+  DocumentAnchored,
+  TenantCreated,
+  OperatorJoined,
+  ViolationPenaltyUpdated,
+  GraphNodeQueryError,
+  GraphNodeQueryResponse,
+  CoSignOperatorConfigured,
+  CoSignPolicyUpdated,
+  DocumentCoSignQualified,
+  DocumentCoSigned,
+  DocumentRevoked,
+  MinOperatorStakeUpdated,
+  NonceConsumed,
+  OperatorMetadataUpdated,
+  OperatorRecovered,
+  OperatorRecoveryAliasUpdated,
+  OperatorRecoveryDelegateUpdated,
+  OperatorSlashed,
+  OperatorSoftSlashed,
+  OperatorStakeToppedUp,
+  OperatorStatusUpdated,
+  OperatorUnstakeRequested,
+  OperatorUnstaked,
+  ProtocolInitialized,
+  RoleAdminChanged,
+  RoleGranted,
+  RoleRevoked,
+  TenantStatusUpdated,
+  TreasuryUpdated,
+  UnstakeCooldownUpdated,
+} from "./types/graph.types";
+export { bytesToHex, hexToBytes, parseError } from "./utils";
+export { decodeContractError } from "./contract-errors";
 export {
   BlockchainClient,
   createBlockchainClient,
   createBlockchainClientFromEnv,
   createRegisterPayload,
   init,
-};
+  BlockchainContext,
+  createBlockchainContext,
+  DirectQueryClient,
+  createDirectQueryClient,
+  createDirectQueryClientFromEnv,
+  GraphQueryClient,
+  createGraphQueryClient,
+  BlockchainSetClient,
+  createBlockchainSetClient,
+  createBlockchainSetClientFromEnv,
+} from "./config/blockchain.config";
 
 export class VerzikSDK {
   static encrypt = encrypt;

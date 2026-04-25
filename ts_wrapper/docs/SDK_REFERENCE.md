@@ -1,26 +1,32 @@
 # VoucherProtocol SDK — Tài liệu tham chiếu
 
-> Phiên bản: `1.0.2-alpha` · Dùng cho: **Backend / Sandbox CLI**  
-> Tất cả hàm đều thuộc `BlockchainClient`. Khởi tạo qua `createBlockchainClientFromEnv()` (đọc từ `.env`).
+> Tất cả hàm đều thuộc `BlockchainClient`. Khởi tạo qua `init()` (đọc từ `.env`).
 
 ---
 
 ## Khởi tạo
 
-```typescript
-import { createBlockchainClientFromEnv } from "@verzik/sdk";
-
-const client = createBlockchainClientFromEnv();
-```
-
+```env
 Biến môi trường cần thiết:
+RPC_URL=
+PROTOCOL_ADDRESS=
+READER_ADDRESS=
 
-| Biến               | Bắt buộc | Mô tả                                                                  |
-| ------------------ | :------: | ---------------------------------------------------------------------- |
-| `RPC_URL`          |    ✓     | Endpoint RPC của node blockchain                                       |
-| `PROTOCOL_ADDRESS` |    ✓     | Địa chỉ contract `VoucherProtocol`                                     |
-| `READER_ADDRESS`   |          | Địa chỉ contract `VoucherProtocolReader` (mặc định = PROTOCOL_ADDRESS) |
-| `PRIVATE_KEY`      |          | Cần thiết cho mọi hàm ghi (transaction)                                |
+# External library contracts (linked into VoucherProtocol at deploy)
+OPERATOR_LIB_ADDRESS=
+DOCUMENT_LIB_ADDRESS=
+COSIGN_LIB_ADDRESS=
+RECOVERY_LIB_ADDRESS=
+
+# Owner
+PRIVATE_KEY=
+
+# Tenant
+# PRIVATE_KEY=
+
+# Operator
+# PRIVATE_KEY=
+```
 
 ---
 
