@@ -449,6 +449,29 @@ export class DirectQueryClient {
       throw new Error(await this.context.decodeError(error));
     }
   }
+
+  async getRecoveryAliasStatus(
+    tenantId: string,
+    operator: string,
+  ): Promise<{
+    hasRecoveryHistory: boolean;
+    rootOperator: string;
+    replacedBy: string;
+  }> {
+    try {
+      const result = await this.context.readerContract.getRecoveryAliasStatus(
+        tenantId,
+        operator,
+      );
+      return {
+        hasRecoveryHistory: Boolean(result[0]),
+        rootOperator: result[1],
+        replacedBy: result[2],
+      };
+    } catch (error) {
+      throw new Error(await this.context.decodeError(error));
+    }
+  }
 }
 
 export function createDirectQueryClient(
