@@ -13,24 +13,24 @@ import type {
   DocumentSnapshot,
 } from "../types/blockchain.types";
 import { DirectQueryClient } from "./blockchain.direct-query";
-import { BlockchainSetClient } from "./blockchain.set-client";
+import { BlockchainSignClient } from "./blockchain.sign-client";
 import { readBlockchainConfigFromEnv } from "./blockchain.context";
 
 export class BlockchainClient {
   private readonly queryClient: DirectQueryClient;
-  private readonly setClient: BlockchainSetClient;
+  private readonly signClient: BlockchainSignClient;
 
   constructor(config: BlockchainConfig) {
     this.queryClient = new DirectQueryClient(config);
-    this.setClient = new BlockchainSetClient(config);
+    this.signClient = new BlockchainSignClient(config);
   }
 
   get signer(): Wallet | undefined {
-    return this.setClient.context.signer;
+    return this.signClient.context.signer;
   }
 
   get instance(): Contract {
-    return this.setClient.context.instance;
+    return this.signClient.context.instance;
   }
 
   get reader(): Contract {
@@ -41,8 +41,8 @@ export class BlockchainClient {
     return this.queryClient;
   }
 
-  get set(): BlockchainSetClient {
-    return this.setClient;
+  get sign(): BlockchainSignClient {
+    return this.signClient;
   }
 
   async getTenantCount(): Promise<bigint> {
@@ -178,11 +178,11 @@ export class BlockchainClient {
     treasuryAddress: string,
     config: TenantConfig,
   ): Promise<string> {
-    return this.setClient.createTenant(tenantName, treasuryAddress, config);
+    return this.signClient.createTenant(tenantName, treasuryAddress, config);
   }
 
   async setTenantStatus(tenantId: string, isActive: boolean): Promise<string> {
-    return this.setClient.setTenantStatus(tenantId, isActive);
+    return this.signClient.setTenantStatus(tenantId, isActive);
   }
 
   async joinAsOperator(
@@ -190,30 +190,30 @@ export class BlockchainClient {
     metadataURI: string,
     stakeAmount: string,
   ): Promise<string> {
-    return this.setClient.joinAsOperator(tenantId, metadataURI, stakeAmount);
+    return this.signClient.joinAsOperator(tenantId, metadataURI, stakeAmount);
   }
 
   async topUpStake(tenantId: string, stakeAmount: string): Promise<string> {
-    return this.setClient.topUpStake(tenantId, stakeAmount);
+    return this.signClient.topUpStake(tenantId, stakeAmount);
   }
 
   async updateOperatorMetadata(
     tenantId: string,
     metadataURI: string,
   ): Promise<string> {
-    return this.setClient.updateOperatorMetadata(tenantId, metadataURI);
+    return this.signClient.updateOperatorMetadata(tenantId, metadataURI);
   }
 
   async requestUnstake(tenantId: string): Promise<string> {
-    return this.setClient.requestUnstake(tenantId);
+    return this.signClient.requestUnstake(tenantId);
   }
 
   async executeUnstake(tenantId: string): Promise<string> {
-    return this.setClient.executeUnstake(tenantId);
+    return this.signClient.executeUnstake(tenantId);
   }
 
   async registerWithSignature(payload: RegisterPayload): Promise<string> {
-    return this.setClient.registerWithSignature(payload);
+    return this.signClient.registerWithSignature(payload);
   }
 
   async coSignDocumentWithSignature(payload: {
@@ -222,14 +222,14 @@ export class BlockchainClient {
     nonce: bigint;
     deadline: bigint;
   }): Promise<string> {
-    return this.setClient.coSignDocumentWithSignature(payload);
+    return this.signClient.coSignDocumentWithSignature(payload);
   }
 
   async setRecoveryDelegate(
     tenantId: string,
     delegate: string,
   ): Promise<string> {
-    return this.setClient.setRecoveryDelegate(tenantId, delegate);
+    return this.signClient.setRecoveryDelegate(tenantId, delegate);
   }
 
   async recoverOperatorByDelegate(
@@ -237,7 +237,7 @@ export class BlockchainClient {
     lostOperator: string,
     reason: string,
   ): Promise<string> {
-    return this.setClient.recoverOperatorByDelegate(
+    return this.signClient.recoverOperatorByDelegate(
       tenantId,
       lostOperator,
       reason,
@@ -245,7 +245,7 @@ export class BlockchainClient {
   }
 
   async setTreasury(tenantId: string, newTreasury: string): Promise<string> {
-    return this.setClient.setTreasury(tenantId, newTreasury);
+    return this.signClient.setTreasury(tenantId, newTreasury);
   }
 
   async revokeDocument(
@@ -253,7 +253,7 @@ export class BlockchainClient {
     fileHash: string,
     reason: string,
   ): Promise<string> {
-    return this.setClient.revokeDocument(tenantId, fileHash, reason);
+    return this.signClient.revokeDocument(tenantId, fileHash, reason);
   }
 
   async slashOperator(
@@ -261,7 +261,7 @@ export class BlockchainClient {
     operator: string,
     reason: string,
   ): Promise<string> {
-    return this.setClient.slashOperator(tenantId, operator, reason);
+    return this.signClient.slashOperator(tenantId, operator, reason);
   }
 
   async softSlashOperator(
@@ -270,7 +270,7 @@ export class BlockchainClient {
     violationCode: string,
     reason: string,
   ): Promise<string> {
-    return this.setClient.softSlashOperator(
+    return this.signClient.softSlashOperator(
       tenantId,
       operator,
       violationCode,
@@ -284,7 +284,7 @@ export class BlockchainClient {
     isActive: boolean,
     reason: string,
   ): Promise<string> {
-    return this.setClient.setOperatorStatus(
+    return this.signClient.setOperatorStatus(
       tenantId,
       operator,
       isActive,
@@ -298,7 +298,7 @@ export class BlockchainClient {
     newOperator: string,
     reason: string,
   ): Promise<string> {
-    return this.setClient.recoverOperatorByAdmin(
+    return this.signClient.recoverOperatorByAdmin(
       tenantId,
       lostOperator,
       newOperator,
@@ -314,7 +314,7 @@ export class BlockchainClient {
     minSigners: bigint,
     requiredRoleMask: bigint,
   ): Promise<string> {
-    return this.setClient.setCoSignPolicy(
+    return this.signClient.setCoSignPolicy(
       tenantId,
       docType,
       enabled,
@@ -331,7 +331,7 @@ export class BlockchainClient {
     whitelisted: boolean,
     roleId: number,
   ): Promise<string> {
-    return this.setClient.setCoSignOperator(
+    return this.signClient.setCoSignOperator(
       tenantId,
       docType,
       operator,
@@ -344,14 +344,14 @@ export class BlockchainClient {
     tenantId: string,
     newMinOperatorStake: string,
   ): Promise<string> {
-    return this.setClient.setMinOperatorStake(tenantId, newMinOperatorStake);
+    return this.signClient.setMinOperatorStake(tenantId, newMinOperatorStake);
   }
 
   async setUnstakeCooldown(
     tenantId: string,
     newUnstakeCooldown: bigint,
   ): Promise<string> {
-    return this.setClient.setUnstakeCooldown(tenantId, newUnstakeCooldown);
+    return this.signClient.setUnstakeCooldown(tenantId, newUnstakeCooldown);
   }
 
   async setViolationPenalty(
@@ -359,7 +359,7 @@ export class BlockchainClient {
     violationCode: string,
     penaltyBps: number,
   ): Promise<string> {
-    return this.setClient.setViolationPenalty(
+    return this.signClient.setViolationPenalty(
       tenantId,
       violationCode,
       penaltyBps,

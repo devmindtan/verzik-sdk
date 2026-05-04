@@ -70,9 +70,9 @@ export {
   createDirectQueryClientFromEnv,
   GraphQueryClient,
   createGraphQueryClient,
-  BlockchainSetClient,
-  createBlockchainSetClient,
-  createBlockchainSetClientFromEnv,
+  BlockchainSignClient,
+  createBlockchainSignClient,
+  createBlockchainSignClientFromEnv,
 } from "./config/blockchain.config";
 
 export class VerzikSDK {

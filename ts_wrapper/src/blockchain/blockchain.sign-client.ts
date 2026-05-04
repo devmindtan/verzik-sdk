@@ -9,11 +9,19 @@ import {
 
 const CHAIN_ID = Number(process.env.CHAIN_ID?.trim() ?? 31337);
 
-export class BlockchainSetClient {
+export class BlockchainSignClient {
   readonly context: BlockchainContext;
 
   constructor(config: BlockchainConfig) {
     this.context = new BlockchainContext(config);
+  }
+
+  private assertCanSendTx(action: string): void {
+    if (!this.context.wallet) {
+      throw new Error(
+        `${action} requires PRIVATE_KEY. Contract runner is provider-only and cannot send transactions.`,
+      );
+    }
   }
 
   async createTenant(
@@ -63,6 +71,7 @@ export class BlockchainSetClient {
     metadataURI: string,
     stakeAmount: string,
   ): Promise<string> {
+    this.assertCanSendTx("joinAsOperator");
     try {
       const tx = await this.context.protocolContract.joinAsOperator(
         tenantId,
@@ -79,6 +88,7 @@ export class BlockchainSetClient {
   }
 
   async topUpStake(tenantId: string, stakeAmount: string): Promise<string> {
+    this.assertCanSendTx("topUpStake");
     try {
       const tx = await this.context.protocolContract.topUpStake(tenantId, {
         value: parseEther(stakeAmount),
@@ -169,6 +179,23 @@ export class BlockchainSetClient {
     }
   }
 
+  async registerWithProvidedSignature(
+    payload: RegisterPayload,
+    signature: string,
+  ): Promise<string> {
+    try {
+      this.assertCanSendTx("registerWithProvidedSignature");
+      const tx = await this.context.protocolContract.registerWithSignature(
+        payload,
+        signature,
+      );
+      const receipt = await tx.wait();
+      return receipt.hash as string;
+    } catch (error) {
+      throw new Error(await this.context.decodeError(error));
+    }
+  }
+
   async coSignDocumentWithSignature(payload: {
     tenantId: string;
     fileHash: string;
@@ -199,6 +226,29 @@ export class BlockchainSetClient {
         types,
         payload,
       );
+      const tx =
+        await this.context.protocolContract.coSignDocumentWithSignature(
+          payload,
+          signature,
+        );
+      const receipt = await tx.wait();
+      return receipt.hash as string;
+    } catch (error) {
+      throw new Error(await this.context.decodeError(error));
+    }
+  }
+
+  async coSignWithProvidedSignature(
+    payload: {
+      tenantId: string;
+      fileHash: string;
+      nonce: bigint;
+      deadline: bigint;
+    },
+    signature: string,
+  ): Promise<string> {
+    try {
+      this.assertCanSendTx("coSignWithProvidedSignature");
       const tx =
         await this.context.protocolContract.coSignDocumentWithSignature(
           payload,
@@ -451,12 +501,12 @@ export class BlockchainSetClient {
   }
 }
 
-export function createBlockchainSetClient(
+export function createBlockchainSignClient(
   config: BlockchainConfig,
-): BlockchainSetClient {
-  return new BlockchainSetClient(config);
+): BlockchainSignClient {
+  return new BlockchainSignClient(config);
 }
 
-export function createBlockchainSetClientFromEnv(): BlockchainSetClient {
-  return new BlockchainSetClient(readBlockchainConfigFromEnv());
+export function createBlockchainSignClientFromEnv(): BlockchainSignClient {
+  return new BlockchainSignClient(readBlockchainConfigFromEnv());
 }

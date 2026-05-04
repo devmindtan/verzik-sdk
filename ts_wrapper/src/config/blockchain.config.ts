@@ -13,10 +13,10 @@ export {
 } from "../blockchain/blockchain.direct-query";
 
 export {
-  BlockchainSetClient,
-  createBlockchainSetClient,
-  createBlockchainSetClientFromEnv,
-} from "../blockchain/blockchain.set-client";
+  BlockchainSignClient,
+  createBlockchainSignClient,
+  createBlockchainSignClientFromEnv,
+} from "../blockchain/blockchain.sign-client";
 
 export {
   GraphQueryClient,
